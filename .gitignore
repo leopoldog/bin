@@ -9,3 +9,5 @@ relinkdup
 split2
 tobits
 tstcmt
+CVS
+.cvsignore
