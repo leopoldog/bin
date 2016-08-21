@@ -1,0 +1,58 @@
+#!/bin/bash
+
+ifo="$1"
+name="$2"
+
+if [ -z "$ifo" -o -z "$name" ]
+then
+  echo "Usage: $0 <IFO file> <VOB file> [<VOB file>]"
+  exit -1
+fi
+
+plock
+
+shift
+
+while [ ! -z "$1" ]
+do
+  name="$1"
+
+  echo "$name"
+
+  tempfile="$(mktemp -u)"
+  fifos=
+
+  for n in $(seq 32 64)
+  do
+    fifo="$tempfile.fifo.$n"
+    mkfifo "$fifo"
+    tcextract -i "$fifo" -t vob -x ps1 -a $n > "$tempfile.$n" &
+    fifos="$fifos $fifo"
+  done
+
+  size=$(stat -c "%s" "$name")
+  cat "$name" | pv -s "$size" -i 1 | tee $fifos > /dev/null 2>&1
+
+  echo -en "\033[A\033[K\033[A\033[K"
+  echo -n "$name :"
+
+  for n in $(seq 32 64)
+  do
+    if [ -s "$tempfile.$n" ]
+    then
+      let id=$n-31
+      printf " %02d" $id
+      id0=$(printf "%02d" $id)
+      subtitle2vobsub -p "$tempfile.$n" -i "$ifo" -o "${tempfile}.$n.${id}"
+      mv "${tempfile}.$n.${id}.idx" "${name}.${id0}.idx"
+      mv "${tempfile}.$n.${id}.sub" "${name}.${id0}.sub"
+    fi
+  done
+
+  rm -f "$tempfile"*
+
+  echo
+  shift
+done
+
+plock -u

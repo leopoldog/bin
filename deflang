@@ -1,0 +1,248 @@
+#!/bin/bash
+
+unset LANGUAGE
+unset LANG
+unset LC_ALL
+export LANG=en_US.UTF-8
+
+retitle=0
+PRIORITY=( "ITA:IT" "FRA\|FRE:FR" "GER:DE" "ENG:EN" "SPA:ES" "DUT:NL" "JPN:JA" )
+
+if [ -z "$1" ]
+then
+  cat <<!
+Usage: $0 [-r] <directory> [ <directory> ]
+
+Options:
+  -r  Change the title inside the mkv file to be equal to the title specified in the file name.
+!
+  exit -1
+fi
+
+SUPPRESSDOUBLE="$(echo "s:${PRIORITY[*]}:g;t;p" | sed "s/ /:g;t;s:/g")"
+LANGUAGES=( $(mkvmerge --list-languages | sed "s/  *//g" | cut -d "|" -f 2,3 | sed "s/^\(.*\)|$/\1|\1/g" | grep -v und | tail -n +3 | sort -u | tr "|[:lower:]" ":[:upper:]" | sed -n "$SUPPRESSDOUBLE" | sed "s/:/:~~/g" ) )
+
+REPLACEMENT1="$(echo "s:$(echo $(echo "${PRIORITY[*]}" | tr " " "\n" | nl -w 2 -n rz | sed "s/^[[:space:]]*\([0-9]*\)[[:space:]]*\(.*\):\(.*\)[[:space:]]*$/\2:\1\3/g")):p" | sed "s/ /:p;s:/g")"
+REPLACEMENT2="$(echo "s:${LANGUAGES[*]}:p" | sed "s/ /:p;s:/g")"
+
+let MAX_LANG=${#PRIORITY[*]}
+
+function getlang
+{
+  in="$@"
+
+  LIST="$(echo "$in" | tr " ," "\n\n" | sort -u)"
+
+  (
+    echo "$LIST" | sed -n "$REPLACEMENT1"
+    echo "$LIST" | sed -n "$REPLACEMENT2"
+  ) \
+  | sort -u \
+  | cut -c3- \
+  | head -n $MAX_LANG \
+  | tr "\n" "," \
+  | sed "s/,$//g;s/^,//g"
+}
+
+function checkName
+{
+  file="$1"
+  retitle="$2"
+  defname=0
+
+  BASENAME="$(basename "$file" .mkv | sed "s/\(\.[0-9]\+x[0-9]*\+\)*$//g;s/ «.*».*//g")"
+  TRUENAME="$(mkvinfo "$file" | grep -iw "Title:" | sed -n "s/^[^:]*: //p")"
+
+  DATE="$(echo "$BASENAME" | sed -n "s/^\([0-9.X]*\. \).*/\1/p" | sed "s/  *$//g;s/^  *//g")"
+  FILMNAME="$(echo "$BASENAME" | sed -n "s/^$DATE\([^[{«]*\).*/\1/p" | sed "s/  *$//g;s/^  *//g")"
+  BONUSNAME="$(echo "$BASENAME" | sed -n "s/^$DATE[^{]*{\([^}]*\)}.*/\1/p" | sed "s/  *$//g;s/^  *//g")"
+  SPECIAL="$(echo "$BASENAME" | sed -n "s/.*\(<[0-9]>\).*/ \1/p")"
+  EPISODENAME="$(echo "$BASENAME" | sed -n "s/^[^[]*\[.*\]\( *<[0-9]> *\)\?\([^{«]*\).*/\2/p" | sed "s/  *$//g;s/^  *//g")"
+  EPISODENUMBER="$(echo "$BASENAME" | sed -n "s/^[^[]*\[\(.*\)\][^{«]*.*/\1/p" | sed "s/  *$//g;s/^  *//g")"
+  COMMENT="$(echo "$FILMNAME" | sed -n "s/.*(\([^)]*\)).*/\1/p" | sed "s/  *$//g;s/^  *//g")"
+  LANGUAGES="$(basename "$file" | sed -n "s/.*«\(.*\)».*/\1/p")"
+
+  if [ -z "$DATE" ]
+  then
+    DATE="XXXX.XX.XX."
+    TOUCH_DATE=
+  else
+    TOUCH_DATE=$(echo "$DATE" | sed "s/^\([0-9]\{4\}\)\.\([0-9]\{2\}\)\.\([0-9]\{2\}\)\./\1-\2-\3 12:00:00/g;s/^\([0-9]\{4\}\)\.\(04\|06\|09\|11\)\.XX\./\1-\2-30 23:00:00/g;s/^\([0-9]\{4\}\)\.\(01\|03\|05\|07\|08\|10\|12\)\.XX\./\1-\2-31 23:00:00/g;s/^\([0-9]\{2\}\([02468][048]\|[13579][26]\)\)\.02\.XX\./\1-02-29 23:00:00/g;s/^\([0-9]\{4\}\)\.02\.XX\./\1-02-28 23:00:00/g;s/^\([0-9]\{4\}\)\.XX\.XX\./\1-12-31 23:00:00/g;s/^XXXX\.XX\.XX\./9999-12-31 23:00:00/g")
+  fi
+
+  echo "Filename    : $file"
+  echo "Date        : $DATE"
+  echo "Touch date  : $TOUCH_DATE"
+  echo "FilmName    : $FILMNAME"
+  echo "Special     :$SPECIAL"
+  echo "EpisodeNuber: $EPISODENUMBER"
+  echo "EpisodeName : $EPISODENAME"
+  echo "BonusName   : $BONUSNAME"
+  echo "TrueName    : $TRUENAME"
+  echo "Comment     : $COMMENT"
+  echo "Languages   : $LANGUAGES"
+
+  TRUENAME_TRIMMED="$(echo "$TRUENAME" | sed "s/^\([^(]*\).*/\1/g;s/  *$//g;s/^  *//g;s:\/:\\\\:g")"
+  FILMNAME_TRIMMED="$(echo "$FILMNAME" | sed "s/^\([^(]*\).*/\1/g;s/  *$//g;s/^  *//g")"
+  EPISODENAME_TRIMMED="$(echo "$EPISODENAME" | sed "s/^\([^(]*\).*/\1/g;s/  *$//g;s/^  *//g")"
+  BONUSNAME_TRIMMED="$(echo "$BONUSNAME" | sed "s/^\([^(]*\).*/\1/g;s/  *$//g;s/^  *//g")"
+  BONUS_TEST="$(echo "$BONUSNAME_TRIMMED" | sed -r "s/ *[0-9]+[.#]{1} */ /g;s/ *[0-9]+[.#]{0,1}$/ /g;s/^ *//;s/ *$//")"
+  TRUE_TEST="$(echo "$TRUENAME_TRIMMED" | sed -r "s/ *[0-9]+[.#]{1} */ /g;s/ *[0-9]+[.#]{0,1}$/ /g;s/^ *//;s/ *$//")"
+
+  if [ -z "$TRUENAME" ]
+  then
+    echo -en "\e[01;33m"
+    echo -n "No title defined for \"$file\""
+    echo -e "\e[00m"
+    defname=1
+  elif [ "$TRUENAME_TRIMMED" != "$FILMNAME_TRIMMED" -a "$TRUE_TEST" != "$BONUS_TEST" -a "$TRUENAME_TRIMMED" != "$BONUSNAME_TRIMMED" -a "$TRUENAME_TRIMMED" != "$EPISODENAME_TRIMMED" ]
+  then
+    if [ -z "$BONUSNAME" ]
+    then
+      if [ -z "$FILMNAME" ]
+      then
+        if [ -z "$EPISODENUMBER" ]
+        then
+          NEWNAME="$DATE $TRUENAME «$LANGUAGES».WxH.mkv"
+        else
+          NEWNAME="$DATE [$EPISODENUMBER]$SPECIAL $TRUENAME «$LANGUAGES».WxH.mkv"
+        fi
+      else
+        if [ -z "$EPISODENUMBER" ]
+        then
+          NEWNAME="$DATE $TRUENAME «$LANGUAGES».WxH.mkv"
+        else
+          NEWNAME="$DATE $FILMNAME [$EPISODENUMBER]$SPECIAL $TRUENAME «$LANGUAGES».WxH.mkv"
+        fi
+      fi
+    else
+      if [ ! -z "$EPISODENUMBER" ]
+      then
+        NEWNAME="$DATE $FILMNAME [$EPISODENUMBER]$SPECIAL $EPISODENAME {$TRUENAME} «$LANGUAGES».WxH.mkv"
+      else
+        NEWNAME="$DATE $FILMNAME {$TRUENAME} «$LANGUAGES».WxH.mkv"
+      fi
+    fi
+
+    echo -en "\e[01;33m"
+    echo -n "\"$file\" must be like \"$NEWNAME\""
+    echo -e "\e[00m"
+    defname=1
+  fi
+
+  if [ $retitle == 1 -a "$defname" -eq 1 ]
+  then
+    if [ ! -z "$BONUSNAME_TRIMMED" ]
+    then
+      echo "Defining title to: $BONUSNAME_TRIMMED"
+      mkvpropedit "$file" --edit info --set title="$BONUSNAME_TRIMMED"
+    elif [ ! -z "$EPISODENAME_TRIMMED" ]
+    then
+      echo "Defining title to: $EPISODENAME_TRIMMED"
+      mkvpropedit "$file" --edit info --set title="$EPISODENAME_TRIMMED"
+    elif [ ! -z "$FILMNAME_TRIMMED" ]
+    then
+      echo "Defining title to: $FILMNAME_TRIMMED"
+      mkvpropedit "$file" --edit info --set title="$FILMNAME_TRIMMED"
+    fi
+  fi
+
+  if [ ! -z "$TOUCH_DATE" ]
+  then
+    touch -d "$TOUCH_DATE" "$file"
+  else
+    echo -en "\e[01;33m"
+    echo -n "The date is undefined for \"$file\", leaving current date!"
+    echo -e "\e[00m"
+  fi
+}
+
+function rename
+{
+  file="$1"
+  retitle="$2"
+
+  file "$file" | grep -q "Matroska\|EBML file, creator matroska"
+
+  if [ $? -eq 0 ]
+  then
+    prefix="$(basename "$file" .mkv | sed "s/\(\.[0-9]\+x[0-9]*\+\)*$//g;s/ «.*//g;s/  *$//g")"
+    dir="$(dirname "$file")"
+
+    checkName "$file" "$retitle"
+
+    lang=( $(echo $(mkvinfo "$file" \
+                    | grep "+ A track\|+ Track type\|+ Language" \
+                    | tr "\n" " " \
+                    | sed "s;| + A track;\n;g" \
+                    | sed "s;^\(.*\)\(+ Language: *[^ ]*\)\(.*\)\(+ Track type: *[^ ]*\)\(.*\);\1\4\3\2\5;g" \
+                    | sed "s;^[^|]*| *\(.*\);\1|  + Language: eng;g" \
+                    | sed "s;^+ Track type: *\([^ ]\)[^ ]* *|  + Language: *\([^ ]*\) *.*;\1:\2\n;g" \
+                    | sed "s/^v:/s:/g" \
+                    | sort -u \
+                    | grep -v "^$") \
+             | tr " " "," \
+             | sed "s/.*/a:,&,s:/g" \
+             | sed "s/a:\([^:]*\),s:/a:\1\ts:/g;s/\([^:]*\),.:/\1,/g;s/:,/:/g" \
+             | sed "s/[as]://g" \
+             | sed "s/,$//g;s/,\([[:space:]]\)/\1/g" \
+             | tr "[:lower:]" "[:upper:]") )
+
+    aspect=( $(mkvinfo "$file" \
+               | sed -n "s/.*+ Pixel \(width\|height\): /\1 /p" \
+               | sort -r) )
+
+    desc="$(echo "«$(getlang "${lang[0]}")|$(getlang "${lang[1]}")»" | sed "s/|»/»/g")"
+
+    num=1
+    ok=true
+    lines=""
+
+    while $ok
+    do
+      if [ $num -eq 1 ]
+      then
+        name="$dir/$prefix $desc.${aspect[1]}x${aspect[3]}.mkv"
+      else
+        name="$dir/$prefix $desc.${aspect[1]}x${aspect[3]}.${num}.mkv"
+      fi
+
+      if [ -e "$name" ]
+      then
+        if [ "$name" != "$dir/$(basename "$file")" ]
+        then
+          if [ $num -eq 1 ]
+          then
+            lines="$lines$(echo -en "\e[01;31m")$(echo "Already existing: \"$name\"")$(echo -e "\e[00m")
+"
+          fi
+        else
+          lines=""
+          ok=false
+        fi
+      else
+        lines="$lines$(echo -en "\e[01;32m")$(echo -n "Renaming: \"$file\"" to \""$name\"")$(echo -e "\e[00m")
+"
+        mv "$file" "$name"
+        ok=false
+      fi
+
+      let num=num+1
+    done
+
+    echo "$lines"
+  fi
+}
+
+if [ "$1" == "-r" ]
+then
+  retitle=1
+  shift
+fi
+
+find "$@" -type f \
+| sort \
+| while read -r file
+  do
+    rename "${file}" "$retitle"
+  done

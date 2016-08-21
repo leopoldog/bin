@@ -1,0 +1,41 @@
+#!/bin/bash
+
+if [ -z "$1" ]
+then
+  cat <<!
+Usage: $0 { <chapter_file> }
+
+Change the timestamps of the specified chapter file and renumber the chapters headers.
+!
+  exit -1
+fi
+
+for CHAP_FILE in "$@"
+do
+  START_TIME=$(cat "$CHAP_FILE" | head -1 | sed "s/.*=//g")
+  ST=$(date -d "01/01/1971 $START_TIME" +%s.%N)
+  TMP=$(mktemp)
+  NUMBER=1
+
+  sort "$CHAP_FILE" \
+  | while read line
+    do
+      echo "$line" | grep -q "^CHAPTER[0-9]*NAME="
+
+      if [ $? -eq 0 ]
+      then
+        printf "CHAPTER%02dNAME=%s\n" $NUMBER "$(echo "$line" | sed "s/.*=//g")"
+
+        let NUMBER=NUMBER+1
+      else
+        CURR_TIME=$(echo "$line" | sed "s/.*=//g")
+        CT=$(date -d "01/01/1971 $CURR_TIME" +%s.%N)
+        DELTA=$(bc -l <<< "$CT - $ST + 31532400.00000001" )
+        NT=$(date -d @${DELTA:0:8} +%R:%S).${DELTA:9:3}
+        printf "CHAPTER%02d=%s\n" $NUMBER "${NT}"
+      fi
+    done \
+  > $TMP
+
+  mv "$TMP" "$CHAP_FILE"
+done

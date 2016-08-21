@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ -z "$1" -o ! -d "$1" ]
+then
+  echo "You must specify the directory with the old vob files"
+  exit -1
+fi
+
+TEMP=$(mktemp -u)
+
+ls -1i t[0-9]*.vob \
+| sort \
+| sed "s/^[[:space:]]*\([0-9]*\)[[:space:]]/\1\t/g;s/\\\\/\\\\\\\\/g;s/\\[/\\\\[/g" > ${TEMP}.1
+
+ls -1i "$1"/*.vob \
+| sort \
+| sed "s/^[[:space:]]*\([0-9]*\)[[:space:]]/\1\t/g;s/\\\\/\\\\\\\\/g;s/#/\\\\#/g" > ${TEMP}.2
+
+join -t $'\t' "${TEMP}.1" "${TEMP}.2" \
+| grep $'\t' \
+| while read a b c
+  do
+    mmv "$(basename "$b" .vob)*" "$(basename "$c" .vob)#1"
+  done
+
+rm -f "${TEMP}.1" "${TEMP}.2"

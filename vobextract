@@ -1,0 +1,107 @@
+#!/bin/bash
+
+MYSELF="$0"
+
+if [ "$1" == "-u" ]
+then
+  UNIFIED=1
+  shift
+else
+  UNIFIED=0
+fi
+
+FILE="$1"
+shift
+TITLES=( $@ )
+
+if [ -z "$FILE" ]
+then
+  echo "Usage: $0 <DVD directory> [<title number>]"
+  exit -1
+fi
+
+if [ ! -e "$FILE" ]
+then
+  echo "file or directory '$FILE' not found"
+  exit -1
+fi
+
+plock
+
+pushd "$(dirname "$FILE")" > /dev/null 2>&1
+FILE="$PWD/$(basename "$FILE")"
+popd > /dev/null 2>&1
+
+echo "Extract VOB files from '$FILE'"
+
+ionice -c 2 -n 7 -p $$
+
+if [ ! -z "$TITLES" ]
+then
+  echo "Extracting only title(s) ${TITLES[*]}"
+else
+  n=$(dvdxchap -t 1000 "$FILE" 2>&1 | sed -n "s/.*The DVD only contains \([0-9]*\) titles.*/\1/p")
+  TITLES=( $(seq $n) )
+fi
+
+echo "Total titles to extract: ${#TITLES[*]}"
+
+TMP="tmp-$(basename "$FILE")"
+
+mkdir -p "$TMP"
+
+for title in ${TITLES[*]}
+do
+  let chaps=$(dvdxchap -t $title "$FILE" 2>/dev/null | wc -l)/2
+
+  if [ $? -eq 0 ]
+  then
+    if [ $UNIFIED -eq 0 ]
+    then
+      for chapter in $(seq 1 ${chaps})
+      do
+        echo "Extract title $title, chapter $chapter"
+        name=$(printf "t%02dc%03d.vob" ${title} ${chapter})
+        ionice -c2 -n7 tccat -i "$FILE" -T $title,$chapter > "${TMP}/${name}"
+      done
+    else
+      echo "Extract title $title"
+      name=$(printf "t%02d.vob" ${title})
+      ionice -c2 -n7 tccat -i "$FILE" -T $title,-1 > "${TMP}/${name}"
+    fi
+
+    if [ $chaps -ge 2 ]
+    then
+      CHAPS="$(dvdxchap -t $title "$FILE" 2>/dev/null)"
+      LAST_CHAP=$(date +%s -d "01/01/1971 $(echo "$CHAPS" \
+                                            | tail -n 2 \
+                                            | head -n 1 \
+                                            | sed "s/^CHAPTER.*=//g")")
+      length=$(echo $(lsdvd -Ox -t ${title} "${FILE}" \
+                      | sed -n "s;[[:space:]]*</\?length>;;gp") 31532400 $LAST_CHAP \
+               | awk '{printf "%0.0f", $1+$2-$3}')
+
+      if [ "$length" -le 2 ]
+      then
+        CHAPS="$(echo "$CHAPS" \
+                 | head -n -2)"
+      fi
+
+      if [ "$(echo "$CHAPS" | wc -l)" -gt 2 ]
+      then
+        name=$(printf "t%02d.vob.chap" ${title})
+        echo "$CHAPS" > "${TMP}/${name}"
+      fi
+    fi
+  fi
+done
+
+if [ "$UNIFIED" -eq 1 ]
+then
+  pushd "$TMP" > /dev/null 2>&1
+  ripallsubs -d "$FILE"
+  popd > /dev/null 2>&1
+fi
+
+echo "End extraction"
+plock -u

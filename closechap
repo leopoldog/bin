@@ -1,0 +1,38 @@
+#!/bin/bash
+
+if [ -z "$1" ]
+then
+  echo "Usage: $0 <MKV files>"
+  echo
+  echo "Creates chapter files with ChapterTimeEnd if missing or replaces it with new one."
+  exit -1
+fi
+
+trap 'rm -f ${tmp} ${tmp}.end; exit' 2 3
+
+tmp=$(mktemp)
+
+for file in "$@"
+do
+  mkvextract chapters "$file" > "$tmp"
+
+  if [ -s "$tmp" ]
+  then
+    max=$(sed -n "s/ChapterTimeStart>/ChapterTimeEnd>/gp" "$tmp" | tee "$tmp.end" | wc -l)
+
+    let i=2
+    grep -wv "ChapterTimeEnd" "$tmp" \
+    | while read line
+      do
+        echo "$line"
+        echo "$line" | grep -wq "ChapterTimeStart"
+        if [ $? -eq 0 -a "$i" -le "$max" ]
+        then
+          head -n $i "${tmp}.end" | tail -n 1
+          let i++
+        fi
+      done | xmlindent > "$file.chap"
+  fi
+done
+
+rm -f "${tmp}" "${tmp}.end"

@@ -1,0 +1,388 @@
+# $Id: _Makefile_,v 1.1.1.1 2014-07-17 20:34:05 lghi Exp $
+# $Author: lghi $
+# $Locker:  $
+# $Log: _Makefile_,v $
+# Revision 1.1.1.1  2014-07-17 20:34:05  lghi
+#
+#
+# Revision 1.1  2000/03/09 08:58:51  rcom_dev
+# Initial revision
+#
+
+.PHONY: all\
+	comp\
+	link_so_library\
+	link_a_library\
+	link\
+	depend_pgc\
+	depend\
+	clean\
+	mrproper\
+	include\
+	dummy
+
+.SUFFIXES := .o .c .cc .pgc .so .a
+
+# The system name
+SYSNAME := $(shell \uname -s)
+
+# The library path, the executables path and the objects path,
+# must to be specified if you change the default location of the programs
+LIBDIR := $(HOME)/lib
+EXEDIR := $(HOME)/exe
+OBJDIR := $(HOME)/obj
+
+# Specify if the default generated library is a .a or a .so
+# Use a for a .a library
+# Use so for a .so library
+DEFAULTLIB := a
+
+ifeq "$(SYSNAME)" "SunOS"
+  # If the system is SunOS
+  # Options for the a library generation (for the $(AR) command)
+  AFLAGS :=
+
+  # Options for the so library generation (for the $(LD) command)
+  SOFLAGS := -G -B dynamic
+
+  # The standard includes path
+  STDINC := -I /usr/local/include/g++-3 -I /usr/local/mysql/include
+
+  # The no Line Feed character for echo
+  PRE_NO_LF  :=
+  POST_NO_LF := "\c"
+
+  # The compilers to be use, to specify if you change the environment
+  EC   := \ecpg
+  CC   := ${PURIFY} \gcc
+  CPP  := ${PURIFY} \g++
+  LD   := \ld
+  ECHO := /bin/echo
+  AR   := /usr/ccs/bin/ar
+
+  # The standard libraries to use
+  PRELIBS  :=
+  POSTLIBS := stdc++
+else
+  ifeq "$(SYSNAME)" "Linux"
+  # If the system is Linux
+  # Options for the a library generation (for the $(AR) command)
+  AFLAGS :=
+
+  # Options for the so library generation (for the $(LD) command)
+  SOFLAGS := -shared
+
+  # The standard includes path
+  STDINC := -I /usr/include/g++ -I /usr/include/mysql
+
+  # The no Line Feed character for echo
+  PRE_NO_LF  := -n
+  POST_NO_LF :=
+
+  # The compilers to be use, to specify if you change the environment
+  EC   := \ecpg
+  CC   := ${PURIFY} \gcc
+  CPP  := ${PURIFY} \g++
+  LD   := \ld
+  ECHO := /bin/echo
+  AR   := /usr/bin/ar
+
+  # The standard libraries to use
+  PRELIBS  :=
+  POSTLIBS := stdc++
+  else
+  # All the others OS
+  # Options for the a library generation (for the $(AR) command)
+  AFLAGS :=
+
+  # Options for the so library generation (for the $(LD) command)
+  SOFLAGS :=
+
+  # The standard includes path
+  STDINC :=
+
+  # The no Line Feed character for echo
+  PRE_NO_LF  := -n
+  POST_NO_LF :=
+
+  # The compilers to be use, to specify if you change the environment
+  EC   := \ecpg
+  CC   := ${PURIFY} \gcc
+  CPP  := ${PURIFY} \g++
+  LD   := \ld
+  ECHO := /bin/echo
+  AR   := /usr/bin/ar
+
+  # The standard libraries to use
+  PRELIBS  :=
+  POSTLIBS := stdc++
+  endif
+endif
+
+# The current directory
+DIR := $(shell \cd .;/bin/pwd -P 2> /dev/null)
+
+# The normalized HOME directory
+HNORM := $(shell \cd $(HOME);/bin/pwd -P 2> /dev/null)
+
+# The current source directory if exists
+SRCDIR := $(wildcard $(DIR)/source)
+
+# The base directory (if the sources are located in $(HOME)/src/...,
+# the base directory is "$(HOME)/src")
+BASEDIR := $(HNORM)/$(shell \echo $(patsubst $(HNORM)/%,%,$(DIR)) | \sed "s/\// /g" | \cut -d" " -f1)
+
+# The system name
+SYSNAME := $(shell \uname -s)
+
+# Make all library and all executables
+all: comp link_so_library link_a_library link
+
+# Clean all files and erase the cores and the backup files
+mrproper: clean debak
+
+debak:
+	@$(ECHO) Removing core and ~ files
+	@find . -name core -exec $(RM) {} \; -print
+	@find . -name "*~" -exec $(RM) {} \; -print
+	@find . -name ".libs~" -exec $(RM) {} \; -print
+
+# If the source directory exists ignore this makefile part
+ifneq "$(strip $(SRCDIR))" ""
+
+# The name of the current program section
+NAME := $(shell \echo $(patsubst $(BASEDIR)/%,%,$(DIR)) | \sed "s/\///g")
+
+# The list of the Postgres source files (if any)
+PGCSRC := $(wildcard $(SRCDIR)/*.pgc)
+
+# If at least one Postgres source file exists,
+ifdef PGCSRC
+# Generate the list of the .c files corresponding to the .pgc files
+PGCOBJ := $(patsubst $(SRCDIR)/%.pgc,$(OBJDIR)/$(NAME)_%.c,$(PGCSRC))
+endif
+
+# The list of the project include files (generated from the $(BASEDIR)/.include)
+INCLUDES := $(shell while read inc; do \echo -I $$inc; done < $(BASEDIR)/.include)
+
+# The list of the sources files (.c, .cc)
+SOURCES := $(wildcard $(SRCDIR)/*.c $(SRCDIR)/*.cc)
+# The list of the corresponding .o files for (.c, .cc, .pgc)
+OBJECTS := $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/$(NAME)_%.o,$(wildcard $(SRCDIR)/*.c))\
+	   $(patsubst $(SRCDIR)/%.cc,$(OBJDIR)/$(NAME)_%.o,$(wildcard $(SRCDIR)/*.cc))\
+	   $(patsubst $(SRCDIR)/%.pgc,$(OBJDIR)/$(NAME)_%.o,$(wildcard $(SRCDIR)/*.pgc))
+
+# The name of the main file (for generating a .exe file)
+MAINNAME := $(wildcard $(SRCDIR)/$(NAME)_main.*)
+
+# If a main file exists, generate the .exe name
+ifdef MAINNAME
+EXENAME := $(EXEDIR)/$(NAME).exe
+endif
+
+# If a .libs file exists, extract the library list, else use the standard one
+ifneq "$(wildcard .libs)" ""
+LIBS := $(PRELIBS) $(shell \cat .libs) $(POSTLIBS)
+else
+LIBS := $(POSTLIBS)
+endif
+
+# Rule for cleaning the directories
+clean:
+	@$(ECHO) Cleaning
+	@$(RM) $(OBJDIR)/$(NAME)_*.o $(OBJDIR)/$(NAME)_*.c $(SRCDIR)/.$(NAME)_depend $(OBJDIR)/.$(NAME)_depend $(LIBDIR)/lib$(NAME).so $(LIBDIR)/lib$(NAME).a $(EXENAME)
+
+# Rule to create the .c file from a .pgc file
+$(OBJDIR)/$(NAME)_%.c:	$(SRCDIR)/%.pgc
+	@$(ECHO) compiling $<
+	@$(EC) $(EFLAGS) $(STDINC) $(INCLUDES) -o $@ $<
+
+# Rule to compile a .c file for generate a .o file
+$(OBJDIR)/$(NAME)_%.o:	$(SRCDIR)/%.c
+	@$(ECHO) compiling $<
+	@$(CC) -D$(SYSNAME) $(CFLAGS) $(STDINC) $(INCLUDES) -o $@ -c $<
+
+# Rule to compile a .c file (object directory) for generate a .o file
+$(OBJDIR)/$(NAME)_%.o:	$(OBJDIR)/$(NAME)_%.c
+	@$(ECHO) compiling $<
+	@$(CC) -D$(SYSNAME) $(CFLAGS) $(STDINC) $(INCLUDES) -o $@ -c $<
+
+# Rule to compile a .cc file for generate a .o file
+$(OBJDIR)/$(NAME)_%.o:	$(SRCDIR)/%.cc
+	@$(ECHO) compiling $<
+	@$(CPP) -D$(SYSNAME) $(CFLAGS) $(STDINC) $(INCLUDES) -o $@ -c $<
+
+# Variable for test if the .exe file must to be generated
+TESTLINK := $(SOURCES)$(PGCOBJ)
+
+# List the .exe if necessary
+ifdef TESTLINK
+link: $(EXENAME)
+else
+link:
+endif
+
+# The list of object that must go in the .so file (all except the *_main.o)
+LIBOBJ := $(strip $(patsubst $(OBJDIR)/$(NAME)_main.o,,$(OBJECTS)))
+
+# If a library must to be generated (the file list isn't empty),
+# make the library
+ifdef LIBOBJ
+# The list of library to use, the local one and those specified in the
+# .libs file
+USELIBS := $(NAME) $(LIBS)
+
+# If a .a file exists, create a .a library instead of a .so one
+ifneq "$(wildcard .so)" ""
+SOLIB := $(LIBDIR)/lib$(NAME).so
+else
+  ifneq "$(wildcard .a)" ""
+ALIB := $(LIBDIR)/lib$(NAME).a
+  endif
+endif
+
+ifeq "$(ALIB)$(SOLIB)" ""
+  ifeq "$(DEFAULTLIB)" "so"
+SOLIB := $(LIBDIR)/lib$(NAME).so
+  else
+ALIB := $(LIBDIR)/lib$(NAME).a
+  endif
+endif
+
+else
+
+USELIBS := $(LIBS)
+
+endif
+
+# Add the fullpath to the local library and search if it exists
+FULLLIBS := $(wildcard $(patsubst %,$(LIBDIR)/lib%.so,$(USELIBS) $(NAME)) $(patsubst %,$(LIBDIR)/lib%.a,$(USELIBS) $(NAME)))
+
+link_so_library: $(SOLIB)
+link_a_library: $(ALIB)
+
+# Rule to create the library file from the objects that must go in the library
+$(LIBDIR)/lib$(NAME).so: $(LIBOBJ)
+	@$(ECHO) Creating library lib$(NAME).so
+	@$(LD) $(SOFLAGS) -o $@ $(LIBOBJ)
+	@$(RM) so_locations
+$(LIBDIR)/lib$(NAME).a: $(LIBOBJ)
+	@$(ECHO) Creating library lib$(NAME).a
+	@$(AR) $(AFLAGS) r $@ $(LIBOBJ)
+
+# Rule to generate the .exe file from the *_main.o file
+$(EXEDIR)/$(NAME).exe: $(OBJDIR)/$(NAME)_$(NAME)_main.o $(FULLLIBS)
+	@$(ECHO) Creating executable $@
+	@$(CC) -L$(LIBDIR) -o $@ $(OBJDIR)/$(NAME)_$(NAME)_main.o $(patsubst %,-l%,$(USELIBS))
+
+# Check if sources files exists
+ifdef SOURCES
+depend: $(SRCDIR)/.$(NAME)_depend
+
+# create the source .depend file
+$(SRCDIR)/.$(NAME)_depend: $(SOURCES)
+	@$(ECHO) Make dependencies for c and cc files
+	@$(RM) $(SRCDIR)/.$(NAME)_depend
+	@for x in $(SOURCES) ; \
+	do \
+		/bin/echo $(PRE_NO_LF) "$(OBJDIR)/$(NAME)_"$(POST_NO_LF) > $(SRCDIR)/.$(NAME)_temp ; \
+		$(CPP) -M -D$(SYSNAME) $(CFLAGS) $(STDINC) $(INCLUDES) $$x >> $(SRCDIR)/.$(NAME)_temp ; \
+		if [ $$? = 0 ] ; \
+		then \
+		  \cat $(SRCDIR)/.$(NAME)_temp ; \
+		fi ; \
+	done > $(SRCDIR)/.$(NAME)_depend
+	@$(RM) $(SRCDIR)/.$(NAME)_temp
+else
+# else erase the .$(NAME)_depend file
+depend: $(SRCDIR)/.$(NAME)_depend
+	@$(RM) $(SRCDIR)/.$(NAME)_depend
+
+$(SRCDIR)/.$(NAME)_depend:
+endif
+
+# Check if sources files exists in the object directory
+ifdef PGCOBJ
+depend_pgc: $(OBJDIR)/.$(NAME)_depend
+
+# create the object .$(NAME)_depend file
+$(OBJDIR)/.$(NAME)_depend: $(PGCOBJ)
+	@$(ECHO) Make dependencies for pgc files
+	@$(RM) $(OBJDIR)/.$(NAME)_depend
+	@for x in $(PGCOBJ) ; \
+	do \
+		/bin/echo $(PRE_NO_LF) "$(OBJDIR)/$(NAME)_"$(POST_NO_LF) > $(OBJDIR)/.$(NAME)_temp ; \
+		$(CPP) -M -D$(SYSNAME) $(CFLAGS) $(STDINC) $(INCLUDES) $$x >> $(OBJDIR)/.$(NAME)_temp ; \
+		if [ $$? = 0 ] ; \
+		then \
+		  \cat $(OBJDIR)/.$(NAME)_temp ; \
+		fi ; \
+	done > $(OBJDIR)/.$(NAME)_depend
+	@$(RM) $(OBJDIR)/.$(NAME)_temp
+else
+# else erase the .$(NAME)_depend file
+depend_pgc: $(OBJDIR)/.$(NAME)_depend
+	@$(RM) $(OBJDIR)/.$(NAME)_depend
+
+$(OBJDIR)/.$(NAME)_depend:
+endif
+
+# Compile all the sources files
+comp: depend $(PGCOBJ) depend_pgc $(OBJECTS)
+
+# Include the source .depend file, if exists
+ifneq "$(wildcard $(SRCDIR)/.$(NAME)_depend)" ""
+include $(SRCDIR)/.$(NAME)_depend
+endif
+
+# Include the object .depend file, if exists
+ifneq "$(wildcard $(OBJDIR)/.$(NAME)_depend)" ""
+include $(OBJDIR)/.$(NAME)_depend
+endif
+
+else
+BASENAME := $(shell basename $(DIR))
+
+ifeq "$(BASENAME)" "source"
+comp link_so_library link_a_library link clean depend: include
+	@$(MAKE) --no-print-directory -C .. $@;
+else
+  ifeq "$(BASENAME)" "include"
+comp link_so_library link_a_library link clean depend: include
+	@$(MAKE) --no-print-directory -C .. $@;
+  else
+# Take the list of all the local subdirectories
+SUBDIRS := $(shell \ls -F | \grep "/$$" 2> /dev/null)
+
+    ifneq "$(strip $(SUBDIRS))" ""
+# Recursive compile of all the subdirectories sources
+comp link_so_library link_a_library link clean depend: include
+	@for x in $(SUBDIRS); \
+	do \
+		$(MAKE) --no-print-directory -C $$x $@; \
+	done
+    else
+comp link_so_library link_a_library link clean depend: include
+	@$(ECHO) Not in a source directory! Ignore !
+    endif
+  endif
+endif
+
+# If the local directory is the $(BASEDIR) directory
+ifeq "$(BASEDIR)" "$(DIR)"
+# The Rule to make the include file is this one
+include: $(BASEDIR)/.include
+
+# Make the .include file
+$(BASEDIR)/.include: dummy
+	@find $(BASEDIR) -name include -type d -print >  $(BASEDIR)/.include
+	@find $(BASEDIR) -name source  -type d -print >> $(BASEDIR)/.include
+else
+# else, the include rule is empty
+include:
+endif
+
+# An empty rule
+dummy:
+
+endif

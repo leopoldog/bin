@@ -1,0 +1,104 @@
+#!/bin/bash
+
+print_help () {
+  echo "Usage: $0 [ iptables-table ]"
+  echo
+  echo "For example : $0 nat"
+  echo
+  echo "Available tables : filter, nat, mangle, raw, security"
+  exit -1
+}
+
+if [ ! -z "$1" ]
+then
+  case "$1" in
+    filter|nat|mangle|raw|security) ;;
+
+    * ) print_help
+        ;;
+  esac
+
+  table="$1"
+else
+  table="filter"
+fi
+
+MIN=0
+POS=$MIN
+
+trap "echo; exit 0" 2 3 15
+
+sudo iptables -L -n > /dev/null
+clear
+
+while true
+do
+  eval $(resize)
+
+  TEXT="$(sudo iptables -L -n -v -t $table)"
+  MAX=$[ $(echo "$TEXT" | wc -l) - $LINES + 2 ]
+  if [ $MAX -lt $MIN ]
+  then
+    MAX=$MIN
+  fi
+
+  echo -en "\e[H"
+  if [ $MAX -eq $MIN ]
+  then
+    printf "%.${COLUMNS}s\e[K\n" "Table : $table          k=Down    j=Up      h=Top     g=Bottom  q=quit"
+  else
+    printf "%.${COLUMNS}s\e[K\n" "Table : $table                     $MIN <= $POS <= $MAX            k=Down    j=Up      h=Top     g=Bottom  q=quit"
+  fi
+  printf -v sep '%*s' $COLUMNS
+  echo -en "${sep// /-}\e[K"
+
+#  echo "$(echo "$TEXT" | tail -n +$POS | head -n $[ $LINES - 2 ])" \
+  let i=0
+  printf "%s\n" "$TEXT" \
+  | while read -r line
+  do
+    if [ $i -ge $POS -a $i -lt $[ $LINES - 2 + $POS ] ]
+    then
+      printf "\n%.${COLUMNS}s\e[K" "$line"
+    fi
+    let i=i+1
+  done
+
+  read -N 1 -t 1 -s c
+  case "$c" in
+    f|F) table=filter
+         clear
+         ;;
+    n|N) table=nat
+         clear
+         ;;
+    m|M) table=mangle
+         clear
+         ;;
+    r|R) table=raw
+         clear
+         ;;
+    s|S) table=security
+         clear
+         ;;
+    k|K) let POS=POS-1
+       if [ $POS -lt $MIN ]
+       then
+         let POS=$MIN
+       fi
+       ;;
+    j|J) let POS=POS+1
+       if [ $POS -gt $MAX ]
+       then
+         let POS=$MAX
+       fi
+       ;;
+    g|G) let POS=$MAX
+       ;;
+    h|H) let POS=$MIN
+       ;;
+    q|Q) echo
+         exit 0
+       ;;
+  esac
+done

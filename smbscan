@@ -1,0 +1,47 @@
+#!/bin/bash
+
+DOMAIN="ls.net.steria.ch"
+HOSTNAME=poky
+LIST=$HOSTNAME
+NEWLIST=""
+OKLIST=""
+NEW="$LIST"
+
+\grep "Created by smbscan V" /etc/hosts > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+  \grep -B10000 "Created by smbscan V" /etc/hosts | \grep -v "Created by smbscan V" > /etc/hosts.new
+else
+  \cp /etc/hosts /etc/hosts.new
+  \echo >> /etc/hosts.new
+fi
+
+\echo "# Created by smbscan V1.0" >> /etc/hosts.new
+
+while [ "$NEW" != "" ]
+do
+  LIST=$NEW
+  NEW=""
+
+  for HOST in $LIST
+  do
+    NEWLIST=`\\smbclient -L $HOST -N | \\grep -A1000 "Server\\(.*\\)Comment" | \\grep -B1000 "Workgroup\\(.*\\)Master" | \\grep -A1000 "\\-\\-\\-\\-" | \\grep -v "\\-\\-\\-\\-" | \\grep -v "Workgroup\\(.*\\)Master" | \\awk "{printf(\\"%s \\", \\$1);}"`
+
+    for x in $NEWLIST
+    do
+      echo "# "$OKLIST" #" | grep " $x " > /dev/null
+      if [ $? -ne 0 ]
+      then
+        NUM=`\\smbclient -L $x -R bcast -N | \\grep "Got a positive" | \\sed "s/\(.*\)(\(.*\))/\2/g"`
+	if [ "$NUM" != "" ]
+	then
+	  \echo $NUM $x $DOMAIN | \awk "{printf(\"%s\\t%s.%s\\t%s\\n\", \$1, \$2, \$3, \$2);}" >> /etc/hosts.new
+	fi
+        OKLIST="$OKLIST $x"
+        NEW="$NEW $x"
+      fi
+    done
+  done
+done
+
+\mv /etc/hosts.new /etc/hosts

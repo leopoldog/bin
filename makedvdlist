@@ -1,0 +1,134 @@
+#!/bin/bash
+
+unset LANGUAGE
+unset LANG
+unset LC_ALL
+export LANG=en_US.UTF-8
+
+plock
+
+HEADER=$'Disk\tGroup\tTitle\tType\tSize\tLanguages\tSubtitles'
+OUTPUT_FILE="${PWD}/dvd_list.csv"
+TMP_FILE="$(mktemp)" || exit -1
+
+EXTRA_LIST=( /media/extra* )
+
+if [ ! -d "$EXTRA_LIST" ]
+then
+  echo "No extra disk present!"
+  exit -1
+fi
+
+mv "${OUTPUT_FILE}.bak" "${OUTPUT_FILE}.bak.0" 2> /dev/null
+cp -a "${OUTPUT_FILE}" "${OUTPUT_FILE}.bak" 2> /dev/null
+
+for extra in "${EXTRA_LIST[@]}"
+do
+  if [ -d "$extra" ]
+  then
+    name="$(basename "$extra")"
+
+    echo "Found disk: $name" >&2
+
+    grep -vF "${HEADER}" "${OUTPUT_FILE}" 2> /dev/null \
+    | grep -v "\<$name\>" \
+    > "${TMP_FILE}"
+
+    (
+      cd "${extra}"
+
+      find * -type f 2> /dev/null \
+      | grep -v "VIDEO_TS\|\.Trash-[0-9]*" \
+      | sed 's/\\/\\\\/g' \
+      | while read file
+        do
+          case "$(file -b "$file")" in
+            JPEG\ image\ data*|GIF\ image\ data*)
+               ;;
+
+            *[mM]atroska*)
+               size=( $(du -s "$file") )
+               languages="$(echo $(mkvinfo "$file" \
+                            | grep "+ A track\|+ Track type\|+ Language" \
+                            | tr "\n" " " \
+                            | sed "s;[^|]*| + A track |  + Track type: *\([^ ]\)[^ ]* *\(|  + Language: *\([^ ]*\)\)\? *;\1:\3\n;g" \
+                            | sed "s/:$/:eng/g" \
+                            | grep -v "^v:" \
+                            | sort -u) \
+                            | tr " " "," \
+                            | sed "s/.*/a:,&,s:/g" \
+                            | sed "s/a:\([^:]*\),s:/a:\1\ts:/g;s/\([^:]*\),.:/\1,/g;s/:,/:/g" \
+                            | sed "s/a://g;s/s://g" \
+                            | sed "s/,$//g;s/,\([[:space:]]\)/\1/g")"
+               stat --printf "%n\t%F\t$size\t$languages\n" "$file"
+               ;;
+
+            *) size=( $(du -s "$file") )
+               stat --printf "%n\t%F\t$size\n" "$file"
+               ;;
+          esac
+        done \
+      | sort -u
+    ) | \
+    (
+      IFS=$'\t'
+
+      while read -r filename rest_of_line
+      do
+        echo "$name"$'\t'"$(dirname "$filename")"$'\t'"$(basename "$filename")"$'\t'"$rest_of_line"
+      done
+    ) >> "${TMP_FILE}"
+
+    (
+      cd "${extra}"
+
+      find * -type d 2> /dev/null \
+      | grep -v "VIDEO_TS\|\.Trash-[0-9]*" \
+      | sed 's/\\/\\\\/g' \
+      | while read file
+        do
+          if [ -d "$file" ]
+          then
+            grep -qF "${file}" "${TMP_FILE}"
+
+            if [ $? -ne 0 ]
+            then
+              echo "$name"$'\t'"${file}"$'\t\tmissing\t'"0" >> "${TMP_FILE}"
+            fi
+          fi
+        done
+    )
+
+    free=( $(df "${extra}" | grep -F "${extra}") )
+
+    echo "$name"$'\t\t\tfree\t'"${free[3]}" >> "${TMP_FILE}"
+    echo "${HEADER}" > "${OUTPUT_FILE}"
+
+    LANG=C sort -t$'\t' -k 2 "${TMP_FILE}" \
+    | uniq >> "${OUTPUT_FILE}"
+
+    rm -f "${TMP_FILE}"
+  else
+    echo "$extra is not a directory!"
+  fi
+done
+
+LIST=( $(grep -vF $'\tfree\t' "${OUTPUT_FILE}" | wc -l) )
+
+echo "Titles found:" $(( $LIST - 1 ))
+
+rm -f "${OUTPUT_FILE}.bak.0"
+
+echo "Statistic:"
+echo "   N°   Extension"
+cut -f3 ${OUTPUT_FILE} \
+| tail -n +2 \
+| grep -v "^$" \
+| sed -n "s/^.*\.\([^.]*\)$/\1/p" \
+| sed "s/^ .*//g" \
+| tr "[:upper:]" "[:lower:]" \
+| sort \
+| uniq -c \
+| sort -n
+
+plock -u

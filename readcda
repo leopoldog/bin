@@ -1,0 +1,77 @@
+#!/bin/bash
+
+if [ "$REMOTEHOST" == "" ]
+then
+  REMOTEHOST=`hostname`
+fi
+
+declare -a ID=( `/usr/bin/cdda2wav -H -D /dev/cdrom -J 2>&1 | /usr/bin/grep CDDB | /usr/bin/sed "s/x/ /g"` )
+export FILE=/opt/kde2/share/apps/kscd/cddb/*/${ID[3]}
+if [ -f $FILE ]
+then
+  \echo "CDDB Entry found, create titles"
+  ~/bin/crlf -u -i $FILE -o /tmp/file.$$
+  export TITLE=`/usr/bin/grep DTITLE /tmp/file.$$ | /usr/bin/sed "s/DTITLE=//g" | /usr/bin/sed "s/ \\\\//\\\\//g" | /usr/bin/sed "s/\\\\/ /\\\\//g" | /usr/bin/sed "s/\\"/\\\\\\"/g"`
+  /bin/mkdir -p "$TITLE"
+  /bin/cp /tmp/file.$$ "${TITLE}/cddb.inf"
+  declare -i count=0
+  /bin/cat > /tmp/command.blade.$$.sh << EOF
+#!/bin/bash
+################## BEGIN exported task ###########################
+while true
+do
+  f=\`\\\\ls /tmp/audio*_.$$.wav 2>/dev/null\`
+  if [ "\$f" == "" ]
+  then
+    break
+  fi
+  /bin/sleep 1
+done
+
+/usr/bin/nice -20 /home/lghi/bin/bladeenc -QUIT -DELETE /tmp/audio*.$$.wav
+EOF
+  ~/bin/gettitle < /tmp/file.$$ | while \read t
+  do
+    t=`\\echo $t | /usr/bin/sed "s/\\"/\\\\\\"/g" | /usr/bin/sed "s/\\//-/g"`
+    count=$count+1
+    num=`\\echo $count | /usr/bin/awk '{printf("%02d", $1);}'`
+    echo "Song $num: ${TITLE}/${num}# ${t}"
+#    /usr/bin/cdda2wav -H -S 40 -D /dev/cdrom -t$count -x -Owav /tmp/audio${count}.$$.wav
+    /bin/cat > /tmp/command${count}.$$.sh << EOF
+#!/bin/bash
+################## BEGIN exported task ###########################
+/usr/bin/nice ~/bin/trim /net/${HOSTNAME}/tmp/audio${count}.$$.wav /tmp/audio${count}_.$$.wav
+/bin/rm -f /net/${HOSTNAME}/tmp/audio${count}.$$.wav &
+export VOL=\`/usr/bin/nice /usr/bin/sox /tmp/audio${count}_.$$.wav -e stat -v 2>&1\`
+if [ "\$VOL" != "1.000" ]
+then
+  /usr/bin/nice /usr/bin/sox -v\$VOL /tmp/audio${count}_.$$.wav /tmp/audio${count}.$$.wav
+  /bin/rm -f /tmp/audio${count}_.$$.wav
+else
+  /bin/mv /tmp/audio${count}_.$$.wav /tmp/audio${count}.$$.wav
+fi
+
+/bin/rm -f /net/${HOSTNAME}/tmp/command${count}.$$.sh
+################### END exported task ############################
+EOF
+    /bin/cat >> /tmp/command.blade.$$.sh << EOF
+/bin/mv /tmp/audio${count}.$$.mp3 "/net/${HOSTNAME}${PWD}/${TITLE}/${num}# ${t}.mp3"
+EOF
+    /bin/chmod +x /tmp/command${count}.$$.sh
+    /usr/bin/cdparanoia -S 52 -w $count /tmp/audio${count}.$$.wav
+    /usr/bin/rsh -n $REMOTEHOST /net/${HOSTNAME}/tmp/command${count}.$$.sh &
+  done
+  /bin/rm -f /tmp/file.$$
+  \echo "Wait for the end of child tasks"
+  wait
+  /bin/cat >> /tmp/command.blade.$$.sh << EOF
+/bin/rm /net/${HOSTNAME}/tmp/command.blade.$$.sh
+################### END exported task ############################
+EOF
+  /bin/chmod +x /tmp/command.blade.$$.sh
+  /bin/sleep 10
+  /usr/bin/rsh -n $REMOTEHOST /net/${HOSTNAME}/tmp/command.blade.$$.sh &
+else
+  \echo "No CDDB entry found in kscd database"
+fi
+

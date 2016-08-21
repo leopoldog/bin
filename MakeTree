@@ -1,0 +1,293 @@
+#!/bin/bash
+# $Id: MakeTree,v 1.1.1.1 2014-07-17 20:34:05 lghi Exp $
+# $Author: lghi $
+# $Locker:  $
+# $Log: MakeTree,v $
+# Revision 1.1.1.1  2014-07-17 20:34:05  lghi
+#
+#
+# Revision 2.8  2000/05/17 15:27:01  lghi
+# Improved all the functions
+#
+# Revision 2.7  2000/05/17 09:10:27  lghi
+# Using the quiet mode for retrieve files
+#
+# Revision 2.6  2000/05/04 09:26:58  lghi
+# Corrected the dump function
+#
+# Revision 2.5  2000/04/28 14:01:43  lghi
+# Improved create function
+#
+# Revision 2.4  2000/04/27 16:17:36  lghi
+# Added the capacity to clean the directory tree if a branch is empty
+#
+# Revision 2.3  2000/04/27 08:21:17  lghi
+# Correct a bug in the create function
+#
+# Revision 2.2  2000/04/26 14:06:34  rcom_vs
+# Now it's possible to extract files using all parameters we want
+#
+# Revision 2.1  2000/04/26 13:48:05  rcom_vs
+# Enhaced the create function for using major version number
+#
+# Revision 2.0  2000/04/26 13:33:03  rcom_vs
+# Modifications pour Valais
+#
+# Revision 1.6  2000/04/10 15:42:35  rcom_vs
+# Enhaced the create and clean functions
+#
+# Revision 1.5  2000/04/10 15:11:33  LGHI
+# Corrected create function
+#
+# Revision 1.4  2000/04/10 15:04:27  LGHI
+# Updated the create function
+#
+# Revision 1.3  2000/04/10 14:52:02  LGHI
+# Added revision control tags
+#
+
+trap '\\echo break; \\rm -f /tmp/dump.$$; exit' 2 3
+
+rcs_dir=~rcom_dev/RCS
+
+function CleanVersion ()
+{
+  \echo Clean the current version
+
+  \pushd ~/src > /dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    \make mrproper > /dev/null 2>&1
+    \popd > /dev/null
+  fi
+  \rm -f ~/src/.include > /dev/null 2>&1
+  \rm -rf ~/obj ~/lib ~/exe > /dev/null 2>&1
+
+  return 0
+}
+
+function CreateDirectories ()
+{
+  \echo Create directories
+
+  \find . -type d -print | while read dir
+  do
+    if [ "$dir" != "." ]
+    then
+      d=`\\echo $dir | \\sed "s/^\\.\\///"`
+      \mkdir ~/$d > /dev/null 2>&1
+
+      \rm -f ~/$d/RCS > /dev/null 2>&1
+
+      if [ -L ~/$d/Makefile ]
+      then
+        \rm -f ~/$d/Makefile
+      fi
+    fi
+  done
+
+  return 0
+}
+
+function ExtractFiles ()
+{
+  \echo Extract files
+
+  shift 1
+  \find . -type f -print | \sort | while read file
+  do
+    d=`\\dirname $file | \\sed "s/^\\.\\///"`
+    f=`\\echo $file | \\sed "s/,v$//g"`
+    \rcsclean -q -u ~/$f $file
+    \co -q $@ ~/$f $file 2>&1 | \grep -v "revision \(.*\) absent"
+  done
+
+  return 0
+}
+
+function CleanWorkDirectories ()
+{
+  \echo Clean the work directories and create new RCS links
+
+  \ln -s $1 ~/RCS > /dev/null 2>&1
+  \find . -type d -print | sort -r | while read dir
+  do
+    if [ "$dir" != "." ]
+    then
+      d=`\\echo $dir | \\sed "s/^\\.\\///"`
+      \rmdir ~/$d > /dev/null 2>&1
+      \ln -s ~/RCS/$d ~/$d/RCS > /dev/null 2>&1
+    fi
+  done
+
+  return 0
+}
+
+function FinishInstallation ()
+{
+  \echo Create other directories
+
+  \mkdir ~/exe ~/lib ~/obj ~/traces ~/logs > /dev/null 2>&1
+
+  \echo Create Makefiles
+
+  \pushd ~/src > /dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    \NewMake > /dev/null
+    \make include
+    \popd > /dev/null
+  fi
+
+  if [ ! -f ~/.edit ]
+  then
+    \echo Create the full edit profile
+
+    \full create
+  fi
+
+  return 0
+}
+
+function RestoreFrom ()
+{
+  \echo Restore from $1
+
+  \cat $1 | grep -v "^#" | while read line
+  do
+    if [ "$line" != "" ]
+    then
+      typeset -a data=($line)
+      dir=`dirname ${data[0]}`
+      if [ ! -d ${dir} ]
+      then
+        \mkdir -p ${dir}
+        \ln -s ~/RCS/${dir} ${dir}/RCS
+      fi
+      \co -q -r${data[1]} ~/RCS/${data[0]},v ~/${data[0]}
+    fi
+  done
+}
+
+function DumpTo ()
+{
+  \echo Dump to $1
+
+  \echo "# Dump generated on `\\date +\"%Y-%m-%d %H:%M:%S\"`" > $1
+
+  Id='$Id'
+  \pushd $rcs_dir > /dev/null
+  \find . -type f -print | \sed "s/,v\$//g" > /tmp/dump.$$
+
+  \cd ~ > /dev/null
+  \cat /tmp/dump.$$ | while read file
+  do
+    typeset -a id=( `\\ident $file 2> /dev/null | \\grep "\\$Id: " | \\head -1` )
+    if [ "${id[*]}" == "" ]
+    then
+      for check in `\\rlog $file 2> /dev/null | \\grep "revision " | \\cut -d' ' -f2 | \\sort -rn`
+      do
+        \rcsdiff -r$check $file > /dev/null 2>&1
+        if [ $? -eq 0 ]
+        then
+          \echo $file $check
+          break
+        fi
+      done
+    else
+      \echo $file ${id[2]}
+    fi
+  done | \sed "s/^.\\///g" | \sort -u >> $1
+  \rm /tmp/dump.$$
+  \popd > /dev/null
+}
+
+case "$1" in
+  create)
+    \pushd $rcs_dir > /dev/null
+
+    CleanVersion
+    CreateDirectories
+    ExtractFiles $@
+    CleanWorkDirectories
+    FinishInstallation
+
+    \popd > /dev/null
+    ;;
+
+  clean)
+    \pushd $rcs_dir > /dev/null
+
+    CleanVersion
+    CreateDirectories
+
+    \echo Removing unmodified files
+
+    \pushd ~ > /dev/null
+    \find ~ -type ld -name RCS -print | while read dir
+    do
+      \cd `\\echo $dir | sed "s/RCS//g"`
+      \ls -a | while read file
+      do
+        if [ -f $file ]
+        then
+          \rcsclean -q -u $file
+        fi
+      done
+    done
+    \popd > /dev/null
+
+    CleanWorkDirectories
+
+    \echo Initialize an usable user directory
+    \cd ~/bin > /dev/null
+    \co -q $rcs_dir/bin/RCS/co_all,v co_all > /dev/null 2>&1
+    ~/bin/co_all -q
+    \cd ~
+    ~/bin/co_all -q
+
+    \popd $rcs_dir > /dev/null
+    ;;
+
+  use)
+    if [ "$2" == "" ]
+    then
+      \echo
+      \echo "Please specify the filename"
+      \echo
+      exit 1
+    fi
+
+    \pushd $rcs_dir > /dev/null
+
+    CleanVersion
+    CreateDirectories
+    \popd > /dev/null
+
+    RestoreFrom $2
+
+    \pushd $rcs_dir > /dev/null
+    CleanWorkDirectories
+    FinishInstallation
+    \popd > /dev/null
+    ;;
+
+  dump)
+    if [ "$2" == "" ]
+    then
+      \echo
+      \echo "Please specify the filename"
+      \echo
+      exit 1
+    fi
+
+    DumpTo $2
+    ;;
+
+  *)
+    \echo
+    \echo "Usage: `basename $0` [ create | clean | use filename | dump filename ]"
+    \echo
+    ;;
+
+esac

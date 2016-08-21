@@ -1,0 +1,61 @@
+#!/bin/bash
+
+trap 2 3 15
+
+if [ -z "$1" ]
+then
+  echo "You must specify a list of directories!"
+  exit -1
+fi
+
+plock
+
+ionice -c 2 -n 7 -p $$
+
+for y in "$@"
+do
+  if [ ! -d "$y" ]
+  then
+    echo "$y is not a directory!"
+  else
+    cd "$y"
+    echo -n "$PWD:"
+
+    for x in $(seq -f %02.0f 1 99)
+    do
+      list=( t${x}c[0-9][0-9][0-9].vob )
+
+      case ${#list[*]} in
+        0)
+          ;;
+
+        1)
+          if [ -f "${list}" ]
+          then
+            echo -n " $x"
+            mv "${list}" "t${x}.vob"
+            chmod 444 "t${x}.vob"
+          fi
+          ;;
+
+        *)
+          echo -n " $x"
+          cat "${list[@]}" > "t${x}.vob"
+          if [ $? -ne 0 ]
+          then
+            echo "Abort!"
+            plock -u
+            exit -1
+          fi
+          chmod 444 "t${x}.vob"
+          rm "${list[@]}"
+          ;;
+      esac
+    done
+
+    echo
+    cd - > /dev/null
+  fi
+done
+
+plock -u

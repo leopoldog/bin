@@ -1,0 +1,48 @@
+#!/bin/bash
+
+ifo="$1"
+name="$2"
+
+if [ -z "$ifo" -o -z "$name" ]
+then
+  echo "Usage: $0 <IFO file> <VOB file> [<VOB file>]"
+  exit -1
+fi
+
+plock
+
+shift
+
+while [ ! -z "$1" ]
+do
+  name="$1"
+
+  echo -n "$name:"
+
+  for n in $(seq 32 64)
+  do
+    let id=$n-31
+    tempfile="$(mktemp -u)"
+
+    printf " %02d" $id
+
+    tcextract -i "$name" -t vob -x ps1 -a $n > "$tempfile"
+
+    if [ -s "$tempfile" ]
+    then
+      id0=$(printf "%02d" $id)
+      subtitle2vobsub -p "$tempfile" -i "$ifo" -o "${tempfile}.${id}"
+      mv "${tempfile}.${id}.idx" "${name}.${id0}.idx"
+      mv "${tempfile}.${id}.sub" "${name}.${id0}.sub"
+    else
+      echo -en "\033[3D\033[K"
+    fi
+
+    \rm -f "$tempfile"
+  done
+
+  echo
+  shift
+done
+
+plock -u

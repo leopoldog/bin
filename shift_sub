@@ -1,0 +1,63 @@
+#!/bin/bash
+
+DELTA="$1"
+shift
+
+if [ -z "$DELTA" ]
+then
+  cat <<!
+Usage: $0 <delta> { <filename> }
+
+delta     A number of seconds to shift the subtitle index
+
+filename  The filename of the index file to shift (must be a VobSub .idx file)
+!
+  exit 0
+fi
+
+d=$(bc <<< "${DELTA}+0" 2> /dev/null)
+
+if [ "0$d" != "0$DELTA" 2> /dev/null ]
+then
+  echo "You must specify a number of seconds"
+  exit -1
+fi
+
+for file in "$@"
+do
+  head -1 "$file" \
+  | grep -q "VobSub index file"
+
+  if [ $? -eq 0 ]
+  then
+    echo "Shifting: $file"
+
+    TEMP_FILE=$(mktemp)
+
+    cat "$file" \
+    | while read l
+      do
+        echo "$l" \
+        | grep -q "^timestamp"
+
+        if [ $? -eq 0 ]
+        then
+          echo "$l" \
+          | sed "s/^timestamp: \([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\):\([0-9][0-9][0-9]\), filepos: \([[:xdigit:]]*\)$/\1.\2 \3/g" \
+          | while read TIME POS
+            do
+              TEMP=$(bc -l <<< "$(date -d "01/01/1971 $TIME" +%s.%N) + $DELTA + 0.00000001")
+              NT=$(date -d @${TEMP:0:8} +%R:%S).${TEMP:9:3}
+              printf "timestamp: %s, filepos: %s\n" "${NT}" "$POS" \
+              | tr "." ":" >> "$TEMP_FILE"
+            done
+        else
+          echo "$l" >> "$TEMP_FILE"
+        fi
+      done
+
+    mv "$TEMP_FILE" "$file"
+  else
+    echo "Not a VobSub index file: $file"
+  fi
+done

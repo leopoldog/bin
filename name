@@ -1,0 +1,22 @@
+#!/bin/bash
+
+if [ -z "$1" -o ! -d "$1" ]
+then
+  echo "Specify a valid directory"
+  exit -1
+fi
+
+for x in $(seq -f%02.0f 99)
+do
+  if [ -e "track${x}.cdda.wav" ]
+  then
+    cd "$1"
+    a=$(ls "$x"*)
+    echo $a
+    cd - > /dev/null
+    mv "track${x}.cdda.wav" "$a"
+  fi
+done
+
+mmv "*.mp3" "#1.wav" > /dev/null
+mmv "*.ogg" "#1.wav" > /dev/null

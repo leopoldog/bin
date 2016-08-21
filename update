@@ -1,0 +1,51 @@
+#!/bin/bash
+
+TYPE=$(d="$(pwd -P)"
+
+       while true
+       do
+         if [ -e "$d/.git" ]
+         then
+           echo "GIT"
+           break
+         elif [ -e "$d/.svn" ]
+         then
+           echo "SVN"
+           break
+         elif [ -e "$d/CVS" ]
+         then
+           echo "CVS"
+           break
+         fi
+
+         if [ "$d" == "/" ]
+         then
+           break
+         fi
+
+         d="$(dirname "$d")"
+       done
+      )
+
+echo "Found a $TYPE repository. Updating."
+
+case "$TYPE" in
+  CVS)
+    cvs update -d -P "$@" 2>&1 \
+    | grep -v "^cvs update"
+    ;;
+
+  SVN)
+    svn update "$@"
+    ;;
+
+  GIT)
+    LC_ALL=en_US.UTF-8 git pull
+    ;;
+
+  *)
+    echo "Not a recognised project"
+    exit -1
+esac
+
+exit 0

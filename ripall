@@ -1,0 +1,25 @@
+#!/bin/bash
+
+name="$1"
+
+if [ -z "$name" ]
+then
+  cat <<!
+Usage: $0 <DVD directory>
+
+Rips all subtitles using ripsubs for the unified files in the current directory.
+The considered files must be in the form t<chapter>.vob (ex. t01.vob).
+!
+  exit -1
+fi
+
+plock
+
+for x in t[0-9][0-9].vob
+do
+  t=$(echo "$x" | sed "s/t\([0-9]*\).vob/\1/g")
+
+  ripsubs "$name" -o t -t "$t"
+done
+
+plock -u

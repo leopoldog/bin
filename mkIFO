@@ -1,0 +1,7 @@
+#!/bin/bash
+mkdir OriginalIFOs
+mkdir FinalIFOs
+rm -f ~/.wine/drive_c/windows/temp/TempIFOs/dummy ~/.wine/drive_c/DVD_Decrypter
+mv ~/.wine/drive_c/windows/temp/TempIFOs/* OriginalIFOs
+touch ~/.wine/drive_c/windows/temp/TempIFOs/dummy OriginalIFOs
+ln -s "$PWD" ~/.wine/drive_c/DVD_Decrypter

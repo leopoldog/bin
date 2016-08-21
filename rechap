@@ -1,0 +1,30 @@
+#!/bin/bash
+
+names="$1"
+
+if [ -z "$names" -o -z "$2" ]
+then
+  echo "Usage: $0 <Names file> {<Chapter file>}"
+  exit -1
+fi
+
+shift
+
+TMPFILE="$(mktemp)"
+
+for chapters in "$@"
+do
+  (
+    grep -v "CHAPTER[0-9][0-9]NAME=" "$chapters"
+    let i=1
+    cat "$names" \
+    | while read line
+      do
+        printf "CHAPTER%02dNAME=%s\n" $i "$line"
+        let i=i+1
+      done
+  ) \
+  | sort > "$TMPFILE"
+
+  mv "$TMPFILE" "$chapters"
+done

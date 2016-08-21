@@ -1,0 +1,41 @@
+#!/bin/bash
+
+TITLES=$(lsdvd "$1" 2>&1 | grep "^Title:" | wc -l)
+
+for f in *.vob
+do
+  if [ -e "$f" ]
+  then
+    echo -e "$(ffprobe -i "$f" -show_entries format=duration -v quiet -of csv="p=0")\t${f}"
+  fi
+done
+
+for t in $(seq -f %02.0f $TITLES)
+do
+  DURATION=$(lsdvd -t $t "$1" 2>&1 \
+             | sed -n "s/.*Length:[[:space:]]*\([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\)[[:space:]].*/\1/p")
+
+  echo -n "t${t}.vob : $DURATION"
+
+  POS=0.0001
+  CHAPTERS=$(lsdvd -t $t -c "$1" 2>&1 \
+             | grep "Chapter:" \
+             | tr "," " ")
+
+  CHAP_COUNT=$(echo "$CHAPTERS" | wc -l)
+
+  if [ ${CHAP_COUNT} -le 1 ]
+  then
+    echo " No chapters"
+    rm -f "t${t}.vob.chap"
+  else
+    echo " Found ${CHAP_COUNT} chapters"
+    echo "$CHAPTERS" \
+    | while read dummy1 chapter dummy2 length dummy3
+      do
+        CHAPTER=$(date -u -d @${POS} +%R:%S.%N)
+        echo -e "CHAPTER${chapter}=${CHAPTER:0:12}\nCHAPTER${chapter}NAME=Chapter ${chapter}"
+        POS=$(echo $(date -u -d "01/01/1970 $length" +%s.%N) $POS | awk '{printf "%f", $1+$2}')
+      done > "t${t}.vob.chap"
+  fi
+done

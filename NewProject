@@ -1,0 +1,10 @@
+#!/bin/bash
+
+while [ "$1" != "" ]
+do
+  \mkdir -p ~/src/$1/include ~/src/$1/source
+  shift
+done
+\cd ~/src
+\NewMake > /dev/null
+\make include

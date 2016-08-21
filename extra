@@ -1,0 +1,83 @@
+#!/bin/bash
+
+case "$1" in
+  m*)
+    sudo -p "Give user password for mount: " ls > /dev/null
+
+    if [ $? -ne 0 ]
+    then
+      exit 1
+    fi
+
+    sudo rmdir "/media/extra$2" 2> /dev/null
+
+    if [ -e "/media/extra$2" ]
+    then
+      echo "Extra disk already mounted, umount first!"
+      exit 1
+    else
+      cd /dev/disk/by-label
+
+      if [ -e "extra$2" ]
+      then
+        name="$(ls "extra$2")"
+        echo "Found disk: $name"
+        sudo mkdir "/media/$name"
+        sudo mount -L "$name" "/media/$name"
+        cd - > /dev/null
+        sudo rmdir "/media/extra$2" 2> /dev/null
+
+        if [ -e "/media/extra$2" ]
+        then
+          echo "Disk $name mounted successfully!"
+        else
+          echo "Unable to mount disk!"
+          exit 1
+        fi
+      else
+        cd - > /dev/null
+        echo "No extra disks found!"
+        exit 1
+      fi
+    fi
+    ;;
+
+  u*)
+    sudo -p "Give user password for umount: " ls > /dev/null
+
+    if [ $? -ne 0 ]
+    then
+      exit 1
+    fi
+
+    sync
+    sync
+    sudo umount "/media/extra$2" 2> /dev/null
+    sudo rmdir "/media/extra$2" 2> /dev/null
+
+    if [ -e "/media/extra$2" ]
+    then
+      echo "Unable to umount disk, probably in use!"
+      exit 1
+    else
+      echo "Disk unmounted successfully!"
+    fi
+    ;;
+
+  *)
+    echo "Missing parameter, please specify 'm' (mount) or 'u' (umount)!"
+    exit 1
+    ;;
+esac
+
+echo -n "Currently mounted disks:"
+for x in /media/extra*
+do
+  if [ -e "$x" ]
+  then
+    echo -n " $(basename "$x")"
+  fi
+done
+echo
+
+exit 0

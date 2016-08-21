@@ -1,0 +1,32 @@
+#!/bin/bash
+# $Id: full,v 1.1.1.1 2014-07-17 20:34:05 lghi Exp $
+# $Author: lghi $
+# $Locker:  $
+# $Log: full,v $
+# Revision 1.1.1.1  2014-07-17 20:34:05  lghi
+#
+#
+# Revision 2.1  2000/05/17 14:52:39  lghi
+# Optimizations and addition of the create command
+#
+# Revision 2.0  2000/04/26 14:33:56  lghi
+# Executes the emacs
+#
+
+EDITOR=emacs
+EDITFILE=~/.edit
+EXTENSIONS=cc,hh,h,c,pgc,pgcc
+SOURCES=include,source
+BASEDIR=./src # referred to the $HOME directory (and must begin with .)
+
+if [ "$1" == "create" ]
+then
+  \cd ~
+  \find $BASEDIR -type d -print | \egrep "`\\echo /$SOURCES\\$ | \\sed \"s/,/\\\\\\$\\\\|\\//g\"`" | \sed "s/^\\.\\/\\(.*\\)\\/\\(.*\\)$/\\1/g" | \sort | \uniq > ~/.edit
+else
+  while read name
+  do
+    \echo Open: $name
+  done < $EDITFILE
+  $EDITOR `eval "\\\\ls -d ~/{\`\\\\cat $EDITFILE | \\\\sort | \\\\uniq | \\\\tr "\\\\n" ","\`}/{$SOURCES}/*.{$EXTENSIONS} 2> /dev/null"` &
+fi

@@ -1,0 +1,1 @@
+spamc -c -f

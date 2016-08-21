@@ -1,0 +1,41 @@
+#!/bin/bash
+
+START=$(date +%s)
+DVD=${1:-/dev/dvdrw}
+
+#mkdir -p "DVD"
+#vobcopy -mlo DVD
+dvdcpy -mo . $DVD
+
+if [ $? != 0 ]
+then
+  echo "Error copying DVD, abort!"
+  exit -1
+fi
+
+eject $DVD
+
+# Reinitilise the directory name if it has changed
+cd .
+
+name="${PWD/*\//}"
+
+for x in $(seq -f %02.0f 1 99)
+do
+  if [ ! -e "$name [$x]" ]
+  then
+    #mv DVD/*/VIDEO_TS "$name [$x]"
+    #rmdir DVD/* DVD
+    mv VIDEO_TS "$name [$x]"
+
+    echo "Created: $name [$x]"
+    STOP=$(date +%s)
+    echo "Elapsed time: "$[ STOP - START ]"s"
+    exit 0
+  fi
+done
+
+echo "Not enough slots to rename directory, leaving it as is!"
+STOP=$(date +%s)
+echo "Elapsed time: "$[ STOP - START ]"s"
+echo -2

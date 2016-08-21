@@ -1,0 +1,76 @@
+#!/bin/bash
+
+base=~/.sig
+newsig=$base/newsig
+signature=$base/signature
+signature_news=${signature}.news
+head=$base/head
+tail=$base/tail
+messages=$base/messages
+image=$base/image
+identity=$base/identity
+
+trap '\rm $newsig' 2 3
+
+declare -a lines
+declare -i joke
+declare -i counter
+declare -i last
+declare -i jokepos
+declare -i sigpos
+declare -i temp
+declare -i flag
+
+lines=(`\\wc -l $messages`)
+
+joke=$RANDOM%${lines[0]}
+
+lines=(`\\wc -l $image`)
+
+temp=${lines[0]}+1
+jokepos=$temp/3
+sigpos=$temp-$jokepos
+
+counter=0
+flag=1
+
+msg="\\"
+
+\rm $newsig 2> /dev/null
+
+while [ $counter != ${lines[0]} ]
+do
+  counter=$counter+1
+  line=`\\tail +$counter $image | \\head -1`
+  \echo -n "$line  " >> $newsig
+
+  if [ $jokepos = $counter ]
+  then
+    msg=`\\tail +$joke $messages | \\head -1`
+  fi
+
+  if [ "$msg" != "\\" ]
+  then
+    \echo -n `\\echo $msg\\\\ | \\cut -d\\\\ -f1` >> $newsig
+    msg=`\\echo $msg\\\\ | \\cut -d\\\\ -f2-`
+
+    if [ $sigpos = $counter -a "$msg" != "" ]
+    then
+      sigpos=$sigpos+$flag
+      flag=0
+    fi
+  fi
+
+  if [ $sigpos = $counter ]
+  then
+    \echo -n "`\\cat $identity`" >> $newsig
+  fi
+
+  \echo >> $newsig
+done
+
+\cat $head $newsig $tail > $signature_news
+\mv $newsig $signature
+\rm $newsig 2> /dev/null
+
+\cat $signature

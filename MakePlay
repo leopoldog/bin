@@ -1,0 +1,4 @@
+#!/bin/bash
+
+\echo "GROUPNAME: Default" > ~/playlist.lst
+\find /home/mp3/ -type f -print | \grep -i "\.mp3" | \prgrandomlines.exe >> ~/playlist.lst

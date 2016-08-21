@@ -1,0 +1,19 @@
+#!/bin/bash
+
+\mkdir $1.dir
+\cd $1.dir
+\cat ../$1 | \cutmail 1
+\mv ../$1 ../$1.old
+for y in `for x in *; do \\md5sum $x; done | \\sort | \\cutmail 2`
+do
+  \rm $y
+done
+
+for y in `\\grep X-UIDL * | \\sed "s/:X-UIDL://g" | \\awk '{printf("%s %s\\n", $2, $1);}' | \\sort | \\cutmail 2`
+do
+  \rm $y
+done
+
+\cat *.msg > ../$1
+\cd ..
+\rm -rf $1.dir

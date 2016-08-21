@@ -1,0 +1,55 @@
+#!/bin/bash
+
+if [ "$1" == "-d" ]
+then
+  LOCK=0
+  shift
+else
+  LOCK=1
+fi
+
+SOURCE="$1"
+
+if [ -z "$SOURCE" ]
+then
+  echo "Usage: $0 [-d] <source dir>"
+  echo
+  echo "  -d   Don't lock"
+  echo
+  exit -1
+fi
+
+if [ "$LOCK" -eq 1 ]
+then
+  plock
+fi
+
+ls -1 t??c???.vob \
+| sed "s/^t\(..\)c...\.vob$/\1/g" \
+| sort -u \
+| while read num
+  do
+    CHAPTERS="$(dvdxchap -t $num "${SOURCE}")"
+
+    NEW_CHAPTERS="$(
+      for x in t${num}c???.vob
+      do
+        chap="$(basename "${x/*c0/}" .vob)"
+        echo "$CHAPTERS" | grep "^CHAPTER${chap}"
+      done
+    )"
+
+    echo "$NEW_CHAPTERS" | grep -q "^CHAPTER02NAME"
+
+    if [ $? -eq 0 ]
+    then
+      echo "$NEW_CHAPTERS" > "t${num}.vob.chap"
+    else
+      rm -f "t${num}.vob.chap"
+    fi
+  done
+
+if [ "$LOCK" -eq 1 ]
+then
+  plock -u
+fi

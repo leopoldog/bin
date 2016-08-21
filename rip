@@ -1,0 +1,10 @@
+#!/bin/bash
+
+eject -t
+time cdparanoia -d /dev/cdrom1 -B
+mkdir tmp
+cd tmp
+time cdparanoia -d /dev/cdrom1 -B
+cd ..
+(eject&) > /dev/null 2>&1
+diff -rwq . tmp

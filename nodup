@@ -1,0 +1,82 @@
+#!/bin/bash
+
+help()
+{
+  if [ ! -z "$1" ]
+  then
+    echo "$1"
+  fi
+
+  cat <<!
+
+Usage: $0 [-hfi] <directories>
+
+Searches for files with more than one links in the specified directories and removes one of the two copies.
+The choosen copy is the last one in the ordered list of found files.
+
+Options:
+  -h     Print this help
+
+  -f     Force the removal of files
+
+  -i     Ask the removal of each file
+         WARNING: Each copy of a file are shown as candidates if one of the copy is not removed.
+!
+
+  if [ ! -z "$1" ]
+  then
+    exit -1
+  else
+    exit 0
+  fi
+}
+
+unset force
+unset ask
+
+while getopts "fih" opt
+do
+  case $opt in
+    f)
+      force=-f
+      ;;
+
+    i)
+      ask=-i
+      ;;
+
+    h)
+      help
+      ;;
+
+    \?)
+      help "Unknown option"
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z "$1" ]
+then
+  help "Missing directories specification"
+fi
+
+unset FILE
+
+IFS="
+"
+FILE=( $(find "$@" -type f -links +1 \
+| sort -r) )
+
+for file in "${FILE[@]}"
+do
+  links=$(stat -c%h "$file")
+
+  if [ $links -ge 2 ]
+  then
+    rm $force $ask "$file"
+  fi
+done
+
+exit 0

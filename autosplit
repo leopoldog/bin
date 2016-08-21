@@ -1,0 +1,79 @@
+#!/bin/bash
+
+if [ "$1" == "--show" ]
+then
+  cmd=show
+  shift
+else
+  cmd=split
+fi
+
+file="$1"
+prefix="${2:-part}"
+
+if [ -z "$file" ]
+then
+  echo "Usage: $0 <file> [<prefix>]"
+  echo
+  echo "Using prefix: $prefix"
+  exit -1
+fi
+
+if [ ! -e "$file" -o ! -e "${file}.idx" ]
+then
+  echo "The files named \"$file\" and \"${file}.idx\" must exist."
+  exit -1
+fi
+
+if [ "$cmd" != "show" ]
+then
+  plock
+fi
+
+list=( $(grep -w Timestamp "${file}.idx" \
+         | sed "s/# Timestamp \([0-9]*\):\([0-9]*\):\([0-9]*\),\([0-9]*\)/a=\1*3600+\2*60+\3+0.\4\na-b\nb=a\n/g" \
+         | bc -l \
+         | nl \
+         | grep -v "[[:space:]]\.\|[[:space:]]0[[:space:]]*$" \
+         | cut -f 1 \
+         | sed "s/.*/&-1/g" \
+         | bc -l \
+         | while read fotogramma
+           do
+             f=$(printf "%03d" $fotogramma)
+             grep "^V $f .*I:" "${file}.idx"
+           done \
+         | sed "s/.*I:\([0-9a-f]*\),.*/0x\1/g" \
+         | sed "s;^0x\([0-9a-f]*\)e$;0x\10;g" \
+         | grep -v "0x00000000") )
+
+if [ ! -z "${list[*]}" ]
+then
+  if [ "$cmd" == "show" ]
+  then
+    echo -e "Split in $[ ${#list[*]} + 1 ] parts\nSizes:"
+    current=0
+    size=( $(du -b "${file}") )
+
+    for pos in "${list[@]}" ${size[0]}
+    do
+      pos=$(printf "%d" "$pos")
+      printf "% 12d %s\n" $[ pos - current ] "$(grep -B 1 $(printf "I:%08x" $(( ${pos}+0xe ))) "${file}.idx" | head -1)"
+      current=$pos
+    done
+
+    echo
+  else
+    IFS=,
+    split2 -o "$prefix-" "$file" -p "${list[*]}"
+  fi
+else
+  echo "Nothing to do"
+fi
+
+if [ "$cmd" != "show" ]
+then
+  plock -u
+fi
+
+exit 0

@@ -1,0 +1,196 @@
+#!/bin/bash
+
+FORCE_MAC=0
+
+help()
+{
+  if [ ! -z "$1" ]
+  then
+    echo "$1"
+  fi
+
+  cat <<!
+
+Usage: $0 [ -h0wlm ] [ -s <screen> ] [ -p <position> ] <alias> [ <username> ]
+
+Open an rdp session to the specified host
+
+Options:
+  -0              Open a console session
+
+  -s <screen>     Open on the specified screen
+
+  -l              Lists the available screens (for use with s option)
+
+  -w              Open a wide screen spawning on both displays (if applicable)
+
+  -p <position>   Use the specified position as left side of the window
+
+  -h              Print this help
+
+  -m              Force MAC address search (if available)
+
+The file .rdp_passwd contains the definitions of machines in the form:
+<alias> <username> <password or - > <domain or - > <hostname or IP address> <MAC address>
+
+Specify the MAC address allow searching the machine on local network even if the address has changed (works only if the address is not responding).
+You must use IP addresses and not machines names to allow MAC scan work.
+!
+
+  if [ ! -z "$1" ]
+  then
+    exit -1
+  else
+    exit 0
+  fi
+}
+
+if [ "$HOSTNAME" = "yoko" ]
+then
+  SIZE=1680x1002+0+24
+else
+  SIZE=$(xrandr -q | sed -n "s/.*[[:space:]]\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\1 \2/p" | while read x y; do echo ${x}x$[ y - 48 ]+0+24; done | uniq)
+fi
+
+while getopts "h0wlms:p:" opt
+do
+  case $opt in
+    w) SIZE=$(xdpyinfo | sed -n "s/.*dimensions:.*[[:space:]]\([0-9]*\)x\([0-9]*\)[[:space:]].*/\1 \2/p" | while read x y; do echo ${x}x$[ y - 48 ]+0+24; done | uniq)
+       ;;
+
+    m) FORCE_MAC=1
+       ;;
+
+    0) CONSOLE="-0"
+       ;;
+
+    s) if [ "$HOSTNAME" = "yoko" ]
+       then
+         case $OPTARG in
+           LEFT) SIZE=1680x1002+0+24
+              ;;
+           RIGHT) SIZE=1280x1024+1680+0
+              ;;
+           *) SIZE=""
+              ;;
+         esac
+       else
+         SIZE=$(xrandr -q | grep "^${OPTARG}[[:space:]]\+connected" | sed -n "s/.*[[:space:]]\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\1 \2 \3 \4/p" | while read x y sx sy; do echo ${x}x$[ y - 48 ]+${sx}+$[ sy + 24 ]; done | uniq)
+       fi
+
+       if [ -z "$SIZE" ]
+       then
+         echo
+         echo "Display $OPTARG not found"
+         echo
+         exit -1
+       fi
+
+       ;;
+
+    l) echo "Available displays:"
+
+       if [ "$HOSTNAME" = "yoko" ]
+       then
+         echo -e "\tLEFT\t-->\t1680x1002+0+24"
+         echo -e "\tRIGHT\t-->\t1280x1024+1680+0"
+       else
+         xrandr -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\2/p"
+       fi
+
+       exit 0
+       ;;
+
+    p) position=$(echo "$OPTARG" | sed -n "s/^\([0-9]*\)$/\1/p")
+
+       if [ -z "$position" ]
+       then
+         echo
+         echo "Invalid position specified: $position"
+         echo
+         exit -1
+       fi
+
+       SIZE=$(xrandr -q | sed -n "s/.*[[:space:]]\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\1 \2/p" | while read x y; do echo $[ x - position ]x$[ y - 48 ]+${position}+24; done | uniq)
+       ;;
+
+    h) help
+       ;;
+
+    \?) help "Unknown option"
+        ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+HOST="$1"
+USER="$2"
+
+if [ -z "${HOST}" ]
+then
+  echo
+  echo "Missing machine alias"
+  echo
+  exit -1
+fi
+
+LIST=$(grep -i "^$HOST[[:space:]][[:space:]]*$USER[[:space:]][[:space:]]*" ~/.rdp_passwd)
+
+if [ -z "$LIST" ]
+then
+  echo
+  echo "No machine found corresponding criteria"
+  echo
+  exit -1
+fi
+
+echo
+echo "Screen position: $SIZE"
+echo
+echo "Found $(echo "$LIST" | wc -l) machine(s) matching, open first connection found"
+
+echo "$LIST" \
+| while read HOST USER PASS DOM ADDR MAC
+do
+  if [ "$USER" == "-" ]
+  then
+    USER=""
+  else
+    USER="-u$USER"
+  fi
+
+  if [ "$PASS" == "-" ]
+  then
+    PASS=""
+  else
+    PASS="-p$PASS"
+  fi
+
+  if [ "$DOM" == "-" ]
+  then
+    DOM=""
+  else
+    DOM="-d$DOM"
+  fi
+
+  ping -q -c 1 "$ADDR" > /dev/null
+
+  if [ $? -eq 1 -o $FORCE_MAC -eq 1 ]
+  then
+    if [ ! -z "$MAC" ]
+    then
+      /usr/bin/nmap -n -sP "$(echo $ADDR | sed "s/\.[^.]*$/.*/g")" > /dev/null
+      ADDR=$(/usr/sbin/arp -n | grep -i "$MAC" | sed -n "s/^\([^ ]*\) .*/\1/p")
+    fi
+  fi
+
+  if [ ! -z "$ADDR" ]
+  then
+    rdesktop -T${HOST} ${USER} ${PASS} ${DOM} -g${SIZE} -a16 -rsound -kfr-ch ${ADDR} -D -z -P -xl $CONSOLE &
+
+    exit 0
+  else
+    exit -1
+  fi
+done

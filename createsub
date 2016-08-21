@@ -1,0 +1,97 @@
+#!/bin/bash
+
+if [ "$1" == "-1" ]
+then
+  NBASE=31
+  shift
+else
+  NBASE=0
+fi
+
+IFO="$1"
+type="$(file -Lb "$IFO")"
+full_list=$(seq 32 63)
+
+if [ -z "$IFO" ]
+then
+  cat <<!
+Usage: $0 [ <IFO file> ] <VOB file>
+
+Extract all subtitles from the specified file
+!
+  exit 0
+fi
+
+if [ "${type/,*/}" == "Video title set" -o "${type/,*/}" == "Video manager" ]
+then
+  shift
+else
+  IFO=""
+  echo -e "\n\e[01;31mWARNING: Using dummy colormap\e[00m\n"
+fi
+
+plock
+
+base=$(mktemp -u -p .)
+
+shopt -s huponexit
+
+trap '\rm -f ${base}.*; exit' 2 3
+
+for INPUT in "$@"
+do
+  fifos=""
+
+  if [ -f "$INPUT" ]
+  then
+    echo "File: $INPUT"
+    echo "Extracting streams"
+
+    for id in ${full_list}
+    do
+      fifos="$fifos $base.fifo.$id"
+      mkfifo "$base.fifo.$id"
+      tcextract -i "$base.fifo.$id" -t vob -x ps1 -a $(printf "0x%02x" $id) > ${base}.stream.$id &
+    done
+
+    cat "$INPUT" | tee $fifos > /dev/null
+
+    echo -n "Converting to vobsub:"
+
+    if [ ! -z "$IFO" ]
+    then
+      ln -s "$IFO" ${base}.ifo
+    else
+      SIZE=$(ffmpeg -i "${INPUT}" 2>&1 | sed -n "s/.*Video:.* \([0-9]*\)x\([0-9]*\).*/\1,\2/p")
+    fi
+
+    for id in ${full_list}
+    do
+      if [ -s "$base.stream.$id" ]
+      then
+        echo -n " $id"
+
+        if [ -z "$IFO" ]
+        then
+          subtitle2vobsub -c "0000FF,00FF00,FF0000,FF00FF,00FFFF,FFFF00,FFFFFF,000080,008000,800000,800080,008080,808000,808080,FF8000,8080FF" -s $SIZE -p ${base}.stream.$id -o ${base}.stream.$id 2> /dev/null
+        else
+          subtitle2vobsub -p ${base}.stream.$id -i ${base}.ifo -o ${base}.stream.$id
+        fi
+
+        nid=$(printf "%02d" $[ id-NBASE ])
+
+        mv ${base}.stream.$id.idx "$(basename "$INPUT")".$nid.idx
+        mv ${base}.stream.$id.sub "$(basename "$INPUT")".$nid.sub
+      fi
+    done
+
+    echo
+    echo
+
+    rm -f ${base}.*
+  else
+    echo "Not a file: $INPUT"
+  fi
+done
+
+plock -u

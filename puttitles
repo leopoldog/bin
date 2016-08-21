@@ -1,0 +1,158 @@
+#!/bin/bash
+
+LANG=C
+MYNAME="$(basename $0)"
+
+print_help()
+{
+  cat <<!
+Usage: $MYNAME [OPTIONS] [DIRECTORIES]
+
+Options:
+
+  -h            print this help
+  -t <file>     use the specified file as title input (one line per file)
+  -s <ext>      search only files with specified extension
+  -e <ext>      append given extension to output title name (default .vob)
+  -o <dir>      use specified directory as output (default .)
+  -n            do nothing
+
+Note: You can't specify an output directory included in the list of input
+      directories.
+!
+  exit $1
+}
+
+TITLES=""
+SEARCH=""
+EXT=""
+OUTPUT=""
+NOTHING=N
+
+while getopts "ht:s:e:o:n" opt
+do
+  case $opt in
+    t)
+      if [ ! -z "$TITLES" ]
+      then
+        print_help 1
+      fi
+      TITLES="$OPTARG"
+      ;;
+    s)
+      if [ ! -z "$SEARCH" ]
+      then
+        print_help 1
+      fi
+      SEARCH="$OPTARG"
+      ;;
+    n)
+      NOTHING=Y
+      ;;
+    e)
+      if [ ! -z "$EXT" ]
+      then
+        print_help 1
+      fi
+      EXT="$OPTARG"
+      ;;
+    o)
+      if [ ! -z "$OUTPUT" ]
+      then
+        print_help 1
+      fi
+      OUTPUT="$OPTARG"
+      ;;
+    h)
+      print_help 0
+      ;;
+    \?)
+      print_help 1
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+dirlist=( "$@" )
+
+if [ -z "$dirlist" ]
+then
+  print_help 3
+fi
+
+if [ -z "$TITLES" ]
+then
+  print_help 2
+fi
+
+if [ -z "$OUTPUT" ]
+then
+  OUTPUT="$PWD"
+fi
+
+if [ -z "$SEARCH" ]
+then
+  SEARCH="vob"
+fi
+
+if [ -z "$EXT" ]
+then
+  EXT="$SEARCH"
+fi
+
+if [ ! -d "$OUTPUT" ]
+then
+  echo "$MYNAME: Output directory not found"
+  exit -1
+fi
+
+pushd "$OUTPUT" > /dev/null  
+OUTPUT="$PWD"
+popd > /dev/null
+
+for d in "${dirlist[@]}"
+do
+  if [ -d "$d" ]
+  then
+    pushd "$d" > /dev/null
+
+    echo "$OUTPUT" | grep -q "$PWD"
+
+    if [ $? -eq 0 ]
+    then
+      echo "$MYNAME: Can't use $OUTPUT as output"
+      exit -1
+    fi
+
+    popd > /dev/null
+  else
+    echo "$MYNAME: Directory not found $d"
+    exit -1
+  fi
+done
+
+list="$(find "${dirlist[@]}" -name "*.$SEARCH" -type f | sort)"
+
+NUM=1
+
+cat "$TITLES" \
+| while read dst
+  do
+    src=$(echo "$list" | tail -n +$NUM | head -n 1)
+
+    if [ ! -z "${src}" ]
+    then
+      dst=$(echo $dst | sed 's;/;\\;g;s;\.\.\.;…;g')
+
+      echo "\"${src}\"" "\"$OUTPUT/$dst.$EXT\""
+
+      if [ "$NOTHING" == "N" ]
+      then
+        mv "${src}" "$OUTPUT/$dst.$EXT"
+        chmod 444 "$OUTPUT/$dst.$EXT"
+      fi
+    fi
+
+    let NUM=$NUM+1
+  done

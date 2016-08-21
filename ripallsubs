@@ -1,0 +1,32 @@
+#!/bin/bash
+
+if [ "$1" == "-d" ]
+then
+  LOCK=0
+  shift
+else
+  LOCK=1
+fi
+
+name="$1"
+
+if [ ! -e "$1" ]
+then
+  echo "You must specify the source DVD"
+  exit -1
+fi
+
+if [ "$LOCK" -eq 1 ]
+then
+  plock
+fi
+
+for x in t[0-9][0-9].vob
+do
+  ripsubs "$name" -o t -t "$(echo "$x" | sed "s/t\([0-9]*\).vob/\1/g")"
+done
+
+if [ "$LOCK" -eq 1 ]
+then
+  plock -u
+fi

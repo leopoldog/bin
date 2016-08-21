@@ -1,0 +1,35 @@
+#!/bin/bash
+
+plock
+
+unset LANGUAGE
+unset LANG
+unset LC_ALL
+export LANG=en_US.UTF-8
+
+tmp=$(mktemp)
+
+trap 'rm -f ${tmp}; exit' 2 3
+
+find "$@" -name "*.mkv" \
+| while read x
+  do
+    mkvinfo "${x/\\/\\\\}" \
+    | sed -n "s/.*Track number: \([0-9]*\).*/\1/p" \
+    | while read n
+      do
+        printf "%d:%s.%02d.t\n" $n "${x/\\/\\\\\\\\}" $n
+      done > "$tmp"
+
+    mkvextract tracks "${x/\\/\\\\}" @"$tmp"
+    mkvextract chapters "${x/\\/\\\\}" > "${x/\\/\\\\}".chap
+
+    if [ ! -s "${x/\\/\\\\}".chap ]
+    then
+      rm "${x/\\/\\\\}".chap
+    fi
+
+    rm -f "$tmp"
+  done
+
+plock -u

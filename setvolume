@@ -1,0 +1,15 @@
+#!/bin/bash
+
+VOL=$(\amixer sget Master | \sed -n "s/Front Left: Playback[[:space:]]*\([0-9]*\)[[:space:]]*.*/\1/p")
+
+case "$1" in
+  up)
+    \amixer sset Master $(( $VOL+1 )) > /dev/null 2>&1
+    ;;
+  down)
+    \amixer sset Master $(( $VOL-1 )) > /dev/null 2>&1
+    ;;
+  *)
+    echo "Usage: $0 [up|down]"
+    ;;
+esac

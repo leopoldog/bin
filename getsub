@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [ -z "$1" -o -z "$2" ]
+then
+  echo "Usage: $0 <stream number> <vob file> [ <mask> ]"
+  echo
+  echo "Extract the subtitles from the specified file."
+  echo
+  echo "The stream number is the subtitle stream number from 0 to 31."
+  echo
+  echo "The optional mask is composed of 4 comma separated numbers between 0 and 255. (default: 255,255,0,255)"
+  exit -1
+fi
+
+if [ ! -z "$3" ]
+then
+  mask="-c $3"
+else
+  mask="-c 64,128,192,256"
+fi
+
+s=$(printf "%d" "$1")
+
+mkdir -p $s
+
+tcextract -x ps1 -t vob -a $(( 32+s )) -i "$2" \
+| subtitle2pgm -o $s/mymovie $mask -C 1

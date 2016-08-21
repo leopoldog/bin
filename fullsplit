@@ -1,0 +1,48 @@
+#!/bin/bash
+
+if [ "$1" == "" ]
+then
+  echo "Usage: $0 <list of vob files>"
+  exit -1
+fi
+
+for x in "$@"
+do
+  name="$(basename "$x" .idx)"
+
+  list=( $(grep -A 2 "^V " "${name}.idx" \
+           | sed -n "s;^V [0-9 ]* I:\([0-9a-f]*\),.*;0x\1;p" \
+           | sed "s;^0x\([0-9a-f]*\)e$;0x\10;g" \
+           | grep -v "0x00000000") )
+
+  oIFS="$IFS"
+  IFS=","
+  split2 "${name}" -o frame -n 6 -p "${list[*]}"
+  IFS="${oIFS}"
+
+  let n=0
+
+  code=$(grep -A 2 "^V " "${name}.idx" \
+         | sed -n "s;^V [0-9 ]* I:\([0-9a-f]*\),.*;\1;p;s/^# Timestamp \(.*\)/\1/p" \
+         | sed "s;^\([0-9a-f]*\)e$;\10;g" \
+         | while read a
+           do
+             read b
+
+             num="$(printf "%06d" $n)"
+
+             mv "frame$num" "i-$b" 2> /dev/null
+             echo $?
+
+             let n=n+1
+           done \
+         | sort -u)
+
+  if [ "$code" == 1 ]
+  then
+    echo "Errors found!"
+    exit 1
+  fi
+done
+
+exit 0

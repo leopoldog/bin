@@ -1,0 +1,413 @@
+#!/bin/bash
+
+help()
+{
+  if [ ! -z "$1" ]
+  then
+    echo "$1"
+  fi
+
+  cat <<!
+
+Usage: $0 [-h] [ -o <output_file> ] { -l [a|s|i|x]<track>:<language> } { -n [a|s]<track>:<name> } [ -t <title> ] [ -x <track> ] [ -c <number>:<name> ] [ -k [a|s]<track>:<number> ] <input_file>
+
+The input file name must specify an existing .vob, .avi, .mkv or .mpg file.
+
+Options:
+  -h                              Print this help
+
+  -o <output_file>                Output file name, if not specified uses the input file name with .mkv extension
+
+  -t <title>                      Defines the file title, if not specified it's automatically deduced by the output file name
+
+  -l [a|s|i|h]<track>:<language>  Defines the language of a track:
+                                    a for an audio track (following the numbering of mkvmerge)
+                                    s for a subtitle track (the track number specifies the file name .idx containing the subtitles definition)
+                                    i for an insets subtitle track (the track number specifies the file name .idx containing the subtitles definition)
+                                    h for a subtitle track for "Hearing impaired"
+
+  -n [a|s]<track>:<name>          Names a track
+                                    a for an audio track
+                                    s for a subtitle or insets track
+
+
+  -c <id>:<name>                  Defines a commentary name (the id distinguish between multiple commentary)
+
+  -k [a|s]<track>:<id>            Assign a commentary identified with the id to the specified track
+                                    a for an audio track
+                                    s for a subtitle or insets track
+
+!
+
+  if [ ! -z "$1" ]
+  then
+    exit -1
+  else
+    exit 0
+  fi
+}
+
+getDefaultLanguage()
+{
+  for l in it fr en es de
+  do
+    echo "$@" | grep -wq $l
+
+    if [ $? == 0 ]
+    then
+      echo $l
+      return
+    fi
+  done
+
+  echo "$@" | sed "s/ .*//g"
+}
+
+unset audioLanguages
+unset audioDefault
+unset audioNames
+unset audioCommentary
+unset subLanguages
+unset subDefault
+unset subNames
+unset subCommentary
+unset insetLanguages
+unset insetDefault
+unset title
+unset exists
+unset output
+unset commentaries
+
+while getopts "c:l:i:n:k:o:t:h" opt
+do
+  case $opt in
+    t) if [ ! -z "$title" ]
+       then
+         help "Specify only one title"
+       fi
+
+       title="$OPTARG"
+       ;;
+
+    o) if [ ! -z "$outputFile" ]
+       then
+         help "Specify only one output file name"
+       fi
+
+       outputFile="$(dirname "$OPTARG")/$(basename "$OPTARG" .mkv)"
+       ;;
+
+    n) OA="${OPTARG:1}"
+       case "${OPTARG:0:1}" in
+         a) audioNames[${OA/:*/}]="${OA/*:/}" ;;
+         s) subNames[${OA/:*/}]="${OA/*:/}" ;;
+         *) help ;;
+       esac
+       ;;
+
+    c) commentaries[${OPTARG/:*/}]="${OPTARG/*:/}" ;;
+
+    k) OA="${OPTARG:1}"
+       case "${OPTARG:0:1}" in
+         a) audioCommentary[${OA/:*/}]="${OA/*:/}" ;;
+         s) subCommentary[${OA/:*/}]="${OA/*:/}" ;;
+       esac
+       ;;
+
+    l) OA=( "${OPTARG//:/ }" )
+       case "${OPTARG[0]}" in
+         a) audioLanguages[${OA[1]}]="${OA[2]}"
+            audioCommentary[${OA[1]}]="${OA[3]}"
+            ;;
+         s) unset insetLanguages[${OA[1]}]
+            hearingImpaired[${OA[1]}]=0
+            subLanguages[${OA[1]}]="${OA[2]}"
+            subCommentary[${OA[1]}]="${OA[3]}"
+            ;;
+         i) unset subLanguages[${OA[1]}]
+            hearingImpaired[${OA[1]}]=0
+            insetLanguages[${OA[1]}]="${OA[2]}"
+            subCommentary[${OA[1]}]="${OA[3]}"
+            ;;
+         h) unset insetLanguages[${OA[1]}]
+            hearingImpaired[${OA[1]}]=1
+            subLanguages[${OA[1]}]="${OA[2]}"
+            subCommentary[${OA[1]}]="${OA[3]}"
+            ;;
+         *) help ;;
+       esac
+       ;;
+
+    h) help ;;
+
+    \?) help "Unknown option" ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+file="$1"
+lastAudio=0
+
+if [ -z "$file" ]
+then
+  help "Missing file name"
+fi
+
+if [ -z "outputFile" ]
+then
+  outputFile="$(basename "$file" | sed "s/\.([vV][oO][bB]\|[aA][vV][iI]\|[mM][kK][vV]\|[mM][pP][gG]\|[mM][pP][eE][gG]\)//")"
+fi
+
+if [ -z "$title" ]
+then
+  title="$(basename "$outputFile" .mkv | sed -n "s/.*{\([^}]*\)}.*/\1/p" | sed "s/^ *//g; s/  *$//g")"
+fi
+
+if [ -z "$title" ]
+then
+  title="$(basename "$outputFile" .mkv | sed -n "s/.* \[[0-9|]\+\] \(.*\)/\1/p" | sed "s/^ *//g; s/  *$//g")"
+fi
+
+if [ -z "$title" ]
+then
+  title="$(basename "$outputFile" .mkv | sed -n "s/^[0-9.]* *\(.*\)/\1/p" | sed "s/^ *//g; s/  *$//g")"
+fi
+
+for s in $(mpeg_ps_info "$file" \
+           | grep -A1000 "Audio streams" \
+           | sed -n "s/ *stream \([0-9]*\).*/\1/p")
+do
+  exists[$s+1]=1
+  let lastAudio=$s+1
+done
+
+lastSub=0
+
+for i in $(seq 0 33)
+do
+  if [ -z "${exists[i]}" ]
+  then
+    unset audioLanguages[$i]
+  fi
+
+  if [ -f "$(printf "%s.%02d.idx" "$file" "$i")" ]
+  then
+    lastSub=$i
+  else
+    unset subLanguages[$i]
+    unset insetLanguages[$i]
+  fi
+done
+
+audioDefault=$(getDefaultLanguage "${audioLanguages[@]}")
+insetDefault=$(getDefaultLanguage "${insetLanguages[@]}")
+subDefault=$(getDefaultLanguage "${subLanguages[@]}")
+
+case "$audioDefault" in
+  fr|it) unset subDefault
+         ;;
+
+  *) if [ ! -z "$subDefault" ]
+     then
+       unset insetDefault
+     fi
+     ;;
+esac
+
+if [ ! -z "$insetDefault" -a ! -z "$audioDefault" -a "$insetDefault" != "$audioDefault" ]
+then
+  unset insetDefault
+fi
+
+TEMPOPT="$(mktemp)"
+
+echo "-o" > "$TEMPOPT"
+echo "  ${outputFile}.mkv" >> "$TEMPOPT"
+
+if [ ! -z "$title" ]
+then
+  echo "--title" >> "$TEMPOPT"
+  echo "  $title" >> "$TEMPOPT"
+fi
+
+for i in $(seq 1 $lastAudio)
+do
+  if [ ! -z "${audioLanguages[i]}" ]
+  then
+    echo "--language" >> "$TEMPOPT"
+    echo "  $i:${audioLanguages[i]}" >> "$TEMPOPT"
+
+    if [ "${audioLanguages[i]}" == "${audioDefault}" ]
+    then
+      echo "--default-track" >> "$TEMPOPT"
+      echo "  $i:1" >> "$TEMPOPT"
+    fi
+  fi
+done
+
+for i in $(seq 1 $lastAudio)
+do
+  if [ -z "${audioLanguages[i]}" ]
+  then
+    echo "--language" >> "$TEMPOPT"
+    echo "  $i:und" >> "$TEMPOPT"
+  fi
+
+  if [ ! -z "${audioNames[i]}" ]
+  then
+    echo "--track-name" >> "$TEMPOPT"
+    echo "  $i:${audioNames[i]}" >> "$TEMPOPT"
+  else
+    ac="${audioCommentary[i]}"
+
+    if [ ! -z "${ac}" -a ! -z "${commentaries[ac]}" ]
+    then
+      echo "--track-name" >> "$TEMPOPT"
+      echo "  $i:${commentaries[ac]}" >> "$TEMPOPT"
+    fi
+  fi
+done
+
+echo "$file" >> "$TEMPOPT"
+
+if [ -e "${file}.xml" ]
+then
+  echo "--chapters" >> "$TEMPOPT"
+  echo "  ${file}.xml" >> "$TEMPOPT"
+else
+  TEMPXML="$(mktemp)"
+
+  ls "${file}.chap"* > /dev/null 2>&1
+
+  if [ $? -eq 0 ]
+  then
+    cat > "$TEMPXML" <<!
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Chapters SYSTEM "matroskachapters.dtd">
+<Chapters>
+  <EditionEntry>
+!
+
+    for cn in $(seq 1 99)
+    do
+      TIME=( $(sed -n "s/$(printf "^CHAPTER%02d=" $cn)//p" "${file}.chap"* | sed "s/^ *//g;s/ *$//g" | sort -u) )
+      NEXTTIME=( $(sed -n "s/$(printf "^CHAPTER%02d=" $(( cn + 1 )) )//p" "${file}.chap"* | sed "s/^ *//g;s/ *$//g" | sort -u) )
+
+      if [ ! -z "$TIME" ]
+      then
+        echo "    <ChapterAtom>" >> "$TEMPXML"
+        echo "      <ChapterTimeStart>$TIME</ChapterTimeStart>" >> "$TEMPXML"
+
+        if [ ! -z "$NEXTTIME" ]
+        then
+          echo "      <ChapterTimeEnd>$NEXTTIME</ChapterTimeEnd>" >> "$TEMPXML"
+        fi
+
+        for cf in "${file}.chap"*
+        do
+          LANGUAGE="${cf/*./}"
+
+          if [ "$LANGUAGE" == "chap" ]
+          then
+            LANGUAGE=en
+          fi
+
+          NAME=$(sed -n "s/$(printf "^CHAPTER%02dNAME=" $cn)//p" "$cf" | sed "s/^ *//g;s/ *$//g;s/&/\&amp;/g")
+
+          if [ ! -z "$NAME" ]
+          then
+            echo "      <ChapterDisplay>" >> "$TEMPXML"
+            echo "        <ChapterString>$NAME</ChapterString>" >> "$TEMPXML"
+            echo "        <ChapterLanguage>$LANGUAGE</ChapterLanguage>" >> "$TEMPXML"
+            echo "      </ChapterDisplay>" >> "$TEMPXML"
+          fi
+        done
+
+        echo "    </ChapterAtom>" >> "$TEMPXML"
+      fi
+    done
+
+    cat >> "$TEMPXML" <<!
+  </EditionEntry>
+</Chapters>
+!
+
+    echo "--chapters" >> "$TEMPOPT"
+    echo "  $TEMPXML" >> "$TEMPOPT"
+  fi
+fi
+
+for i in $(seq 1 $lastSub)
+do
+  f="$file.$(printf "%02d" $i).idx"
+
+  if [ -f "$f" ]
+  then
+    l="${subLanguages[i]}${insetLanguages[i]}"
+    d=0
+    n="${subNames[i]}"
+
+    if [ -z "$l" ]
+    then
+      echo "--language" >> "$TEMPOPT"
+      echo "  0:und" >> "$TEMPOPT"
+    else
+      echo "--language" >> "$TEMPOPT"
+      echo "  0:$l" >> "$TEMPOPT"
+    fi
+
+    if [ -z "${n}" ]
+    then
+      sc="${subCommentary[i]}"
+
+      if [ ! -z "$sc" -a ! -z "${commentaries[ac]}" ]
+      then
+        n="${commentaries[ac]}"
+      elif [ "${hearingImpaired[i]}" == "1" ]
+      then
+        n="Hearing impaired"
+      fi
+    fi
+
+    if [ ! -z "${insetLanguages[i]}" ]
+    then
+      if [ -z "${n}" ]
+      then
+        n="Insets"
+      fi
+
+      if [ ! -z "$insetDefault" -a "${insetLanguages[i]}" == "$insetDefault" ]
+      then
+        d=1
+      fi
+    elif [ ! -z "$subDefault" -a "${subLanguages[i]}" == "$subDefault" ]
+    then
+      d=1
+    fi
+
+    if [ ! -z "$n" ]
+    then
+      echo "--track-name" >> "$TEMPOPT"
+      echo "  0:${n}" >> "$TEMPOPT"
+    fi
+
+    echo "--default-track" >> "$TEMPOPT"
+    echo "  0:$d" >> "$TEMPOPT"
+    echo "$f" >> "$TEMPOPT"
+  fi
+done
+
+plock
+
+echo "---------------------------------- command ----------------------------------"
+cat "$TEMPOPT" # | sed "s/^ *//g" | tr "\n" " "
+echo
+echo "---------------------------------- chapters ---------------------------------"
+cat "$TEMPXML"
+echo "-----------------------------------------------------------------------------"
+mkvmerge @"$TEMPOPT"
+
+plock -u
+
+rm "$TEMPOPT" "$TEMPXML"

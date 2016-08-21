@@ -1,0 +1,39 @@
+#!/bin/bash
+
+prev=""
+prev_version=""
+
+mvn dependency:tree \
+| sort -u \
+| grep ":.*:.*:.*:" \
+| sed "s/^\[INFO\][^[:alnum:]]*//g;s/:[^:]*$//g" \
+| sort -u \
+| tr ":" " " \
+| while read groupId artifactId t v1 v2 dummy
+do
+  version="$v1"
+
+  if [ ! -z "$v2" ]
+  then
+    version="$v2"
+  fi
+
+  if [ "$groupId:$artifactId" == "$prev" ]
+  then
+    if [ "$prev_version" != "$version" ]
+    then
+      if [ ! -z "$prev_version" ]
+      then
+        echo -e "\n$groupId:$artifactId\n\t$prev_version"
+        prev_version=""
+      fi
+
+      echo -e "\t$version"
+    fi
+  else
+    prev="$groupId:$artifactId"
+    prev_version="$version"
+  fi
+done
+
+echo

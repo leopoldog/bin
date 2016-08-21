@@ -1,0 +1,441 @@
+#!/bin/bash
+#      ^- You can replace "bash" with "sh" if you prefer
+#
+# RipSubs - Copyright (c) 2009 Kimmo Kulovesi <arkku.com>
+# 
+# ABSOLUTELY NO WARRANTY - USE AT YOUR OWN RISK ONLY!
+# You may distribute this freely, just keep the copyright notices
+# in this file intact, and mark modified versions as such.
+#
+#
+# This script uses transcode, lsdvd, subtitle2vobsub and possibly
+# fuseiso(!) to rip subtitles from DVDs (physical, .iso or VIDEO_TS directory
+# structure) into the VobSub format. These subtitles can be merged as
+# "soft subs" with tools like mkvmerge, or used separately with some players
+# like mplayer and XBMC.
+#
+# No OCR is required in the process, which I see as a major benefit,
+# although this also means that the files are larger and the fonts don't
+# look as nice. But doing OCR on subtitles is often inaccurate and painful,
+# especially for "uncommon" languages like Finnish.
+#
+# Note that for sources other than VIDEO_TS directories, the user must
+# be able to use "fuseiso" to mount the image or device. On Ubuntu this
+# is ensured by doing:
+#
+#   sudo apt-get install fuseiso
+#   sudo adduser myuserid fuse
+#
+# The user must then either login in again or execute "newgrp fuse" for
+# the change to take effect. The kernel should also include FUSE, but
+# this should already be the case with the stock Ubuntu kernel.
+# 
+# If FUSE is not to be used, the DVD's VIDEO_TS can be copied to the hard
+# disk and used directly as a source for this script, or the DVD can be
+# mounted by other means (e.g. as root or via suitable fstab entry) and the
+# mount directory then be used as source. On most modern Linux
+# distributions the mounting takes place automatically, so the user need
+# not worry about FUSE for physical DVDs.
+#
+# History:
+# 2009-01-20    - Added the capability to specify subtitles by hexadecimal id
+#                 (I encountered some DVDs where lsdvd shows INCORRECT
+#                 ids for subtitles, as does tcprobe... apparently mplayer
+#                 can tell the true id, though.)
+# 2009-01-19    - Corrected problem with .IFO extraction (titleset number)
+# 2009-01-18    - Script made (based on my "DVD-9 to DVD-5" script")
+
+
+# Subtitle type (ps1)
+subtype=ps1
+
+cat <<EOF
+RipSubs, Copyright (c) 2009 Kimmo Kulovesi'
+USE AT YOUR OWN RISK ONLY - ABSOLUTELY NO WARRANTY!'
+
+EOF
+
+
+# Check for required programs along the path.
+# (Remove fuseiso from the list if it is never to be used, i.e. the
+# script will be run on VIDEO_TS directories only.)
+
+for prog in tccat lsdvd tcextract subtitle2vobsub grep awk sed du \
+    tee cut mkfifo rm tail fuseiso printf mktemp expr; do
+    if [ -z "`which $prog`" ]; then
+        echo "Error: Required program $prog not found, aborting!" >&2
+        exit 1
+    fi
+done
+
+
+# Get options
+
+dir=.
+title=""
+subs=""
+source=""
+prefix=""
+reindex=""
+basename=`basename "$0"`
+
+usage () {
+    cat <<EOF
+Usage:
+$basename <source device, .iso or directory with VIDEO_TS>
+    [-t <title number (default longest)>]
+    [-s <subtitle_1,subtitle_2,... (default all)>]
+    [-o <output filename prefix (default DVD disc title)>]
+
+Use $basename -<parameter> for further usage instructions.
+e.g. $basename -s
+
+Subtitles will be ripped to the VobSub format (.sub & .idx). They can be
+specified either by id or by two-letter language code ('en', 'fi', etc)
+using the parameter "-s". The default behaviour is to rip all subs. Ripping
+multiple subtitle tracks does not take much longer than ripping just one
+track.
+
+The source can be a physical DVD device, an image file (.iso) or
+the DVD's VIDEO_TS subdirectory. The capability to use "fuseiso" is
+required in cases other than using the VIDEO_TS directory. If ripping
+from a mounted physical DVD, the mounted VIDEO_TS directory can be used.
+
+The script requires the ability to write some megabytes of temporary
+files in the current working directory. They will be deleted upon script
+completion. By default the results are also saved in the current working
+directory, but other destinations may be specified with the parameter "-o".
+
+Examples:
+    $basename Movie.iso -s en,fi
+    $basename /media/dvd/
+    $basename /tmp/mymovie/VIDEO_TS -o /tmp/subtitles/mymovie
+    $basename /dev/dvd -s 0,2,17 -t 2
+
+Some video players can use these subtitles directly (often finding
+them automatically if they have the same basename as the video file
+being played). The subs can also be merged directly into some video
+containers, e.g.:
+    mkvmerge movie.avi movie_subs.idx -o output.mkv
+EOF
+}
+
+if [ -z "$1" -o "$1" = "-h" -o "$1" = "--help" ]; then
+    usage
+    exit 0
+fi
+
+source="$1"
+shift
+
+while [ -n "$1" ]; do
+    case "$1" in
+        "-t")
+            shift
+            if [ -z "$1" -o "$1" = "help" ]; then
+                echo 'Usage: -t <title number or "auto">' >&2
+                echo 'e.g. -t 1' >&2
+                echo >&2
+                echo 'Defaults to "auto" for the longest title on the DVD.' >&2
+                exit 0
+            fi
+            title="$1"
+            ;;
+        "-s")
+            shift
+            if [ -z "$1" -o "$1" = "help" ]; then
+                echo 'Usage: -s <subtitle1,subtitle2,...>' >&2
+                echo 'Subtitles may be specified by two-letter language' >&2
+                echo 'codes or their numerical id (starting from 0).' >&2
+                echo 'To force a certain hexadecimal id to be used (for' >&2
+                echo 'DVDs showing incorrect ids with lsdvd), give the' >&2
+                echo 'hexadecimal id as 0xXX.' >&2
+                echo 'e.g. -t 0,2,3' >&2
+                echo 'e.g. -t en' >&2
+                echo 'e.g. -t 0x27' >&2
+                echo >&2
+                echo 'Default is to rip all subs for the selected title.' >&2
+                exit 0
+            fi
+            subs="$1"
+            ;;
+        "-o")
+            shift
+            if [ -z "$1" -o "$1" = "help" ]; then
+                echo 'Usage: -o <output prefix>' >&2
+                echo 'e.g. -o Movie' >&2
+                echo 'e.g. -o /destination/path/Movie' >&2
+                echo >&2
+                echo 'Default is to generate a prefix from the DVD disc id.' >&2
+                echo 'NOTE: subtitle2vobsub may fail if there are spaces' >&2
+                echo 'in the prefix. =(' >&2
+                exit 0
+            fi
+            prefix="$1"
+            ;;
+        "-r")
+            reindex=1
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage
+            exit 1
+        ;;
+    esac
+    shift
+done
+
+# Get a listing of titles with audio tracks and subtitles
+
+lsdvd=`lsdvd -v -s "$source"`
+if [ "$?" != "0" ]; then
+    echo "Error: Listing $source failed, aborting!" >&2
+    exit 1
+fi
+
+# Get the DVD name
+
+dvdname=`echo "$lsdvd" | awk '/^Disc Title:/ { print $3; exit 0 }'`
+[ "$dvdname" == "unknown" ] && dvdname=""
+[ -z "$dvdname" ] && dvdname=`basename "$source"`
+dvdname=`echo "$dvdname" | sed 's/[^A-Z0-9a-z0-9_.]//'`
+[ -z "$dvdname" ] && dvdname="untitled_dvd"
+echo "DVD name: $dvdname"
+
+# Try to autoselect the longest title if not specified by user
+
+if [ -z "$title" -o "$title" = "auto" ]; then
+    title=`echo "$lsdvd" | awk '/^Longest track: / { print $3; exit 0 }'`
+    if [ -z "$title" ]; then
+        echo "Error: Couldn't determine feature title, aborting! (Try -t.)" >&2
+        exit 1
+    fi
+fi
+
+# Discard other titles from lsdvd's output
+
+lsdvd=`echo "$lsdvd" | awk -v "title=$title" '/^Title:/ {
+        if (status==1)
+            exit 0
+        num=$2
+        sub(/^0+/,"",num)
+        sub(/,$/,"",num)
+        if (num == title) {
+            status = 1
+            print > "/dev/stderr"
+        }
+        next
+    }
+    status==1 {
+        sub(/^[^A-Za-z0-9]+/,"");
+        if ($2 ~ /^[0-9]/) {
+            sub(/^0+/,"",$2)
+            if ($1 == "Subtitle:" || $1 == "Audio:")
+                $2 -= 1
+        }
+        print
+        next
+    }'`
+
+# Find subtitles by id or language
+
+allsubs=`echo "$lsdvd" | grep '^Subtitle:'`
+if [ -z "$subs" -o "$subs" = "all" ]; then
+#    subs=`echo "$allsubs" | awk '{ subs = subs " " $2 }
+#        END { sub(/^ /, "", subs); print subs }'`
+# LGHI Rip always all subs
+    subs=$(seq 0 31 | tr "\n" " ")
+else
+    subs=`echo $subs | sed 's/,/ /g; s/[^0-9a-zA-Z ]//g'`
+    newsubs=""
+    for sub in $subs; do
+        if echo "$sub" | grep -qs '^0x[0-9A-F][0-9A-F]$'; then
+            newsub="$sub"
+        else
+            newsub=`echo "$allsubs" | awk -v subt=$sub '$2 == subt {
+                print $2
+            }
+            $3 == "Language:" && $4 == subt {
+                print $2
+            }'`
+        fi
+        newsubs="$newsubs $newsub"
+    done
+    subs=`echo $newsubs`
+    unset newsubs
+fi
+
+if [ -z "$subs" ]; then
+    echo "Error: No subtitles selected!" >&2
+    echo '(Some DVDs have subtitles at strange ids other than listed by' >&2
+    echo ' lsdvd. To force extraction of a particular subtitle id, give' >&2
+    echo ' the id as hexadecimal, e.g. 0x20)' >&2
+    exit 1
+fi
+
+# Create a temporary directory for extraction
+
+tmpdir=`mktemp -d "$dir/$dvdname.$$.XXXXX"`
+if [ -d "$tmpdir" ]; then
+    dir="$tmpdir"
+else
+    tmpdir=""
+fi
+
+allfifos=""
+allfiles=""
+
+# Get the .IFO from the DVD (is there a way other than by mounting it?)
+
+titleset=`echo "$lsdvd" | awk '$1 == "VTS:" { printf("%02d", $2); exit 0 }'`
+echo "Obtaining .IFO for title $title in titleset $titleset from $source..."
+
+titleifo="$source/VIDEO_TS/VTS_${titleset}_0.IFO"
+if [ ! -e "$titleifo" ]; then
+    titleifo="$source/VTS_${titleset}_0.IFO"
+    if [ ! -e "$titleifo" ]; then
+        fuseiso -p "$source" "$dir/$dvdname"
+        trap 'fusermount -u "$dir/$dvdname"; rm -rf "$tmpdir"' EXIT
+        titleifo="$dir/$dvdname/video_ts/vts_${titleset}_0.ifo"
+        if [ ! -e "$titleifo" ]; then
+            titleifo="$dir/$dvdname/VIDEO_TS/VTS_${titleset}_0.IFO"
+        fi
+        if [ ! -e "$titleifo" ]; then
+            echo "Error: Unable to obtain .IFO for the selected title!" >&2
+            find "$dir/$dvdname"
+            exit 1
+        fi
+        cp -f "$titleifo" "$dir/${dvdname}_$title.ifo"
+        titleifo="$dir/${dvdname}_$title.ifo"
+        fusermount -u "$dir/$dvdname"
+    fi
+fi
+
+# Create a fifo for each selected subtitle track and start a subtitle
+# extractor process in the background for each fifo
+
+echo "Ripping subtitles: $subs"
+
+trap 'rm -rf $allfifos $allfiles "$tmpdir"' EXIT
+for sub in $subs; do
+    echo "$allsubs" | awk -v subt=$sub '$2 == subt'
+    
+    fifoname="$dir/$dvdname.$title.sub.$sub.fifo"
+    subname="$dir/$dvdname.$title.$(printf "%02d" $sub).$subtype"
+    if echo "$sub" | grep -qs '^0x[0-9A-F][0-9A-F]$'; then
+        sid="$sub"
+        echo "Subtitle: $sid (forced hexadecimal id)"
+    else
+        sid=`expr 32 + $sub`
+        sid=`printf '0x%02x' "$sid"`
+    fi
+    [ -p "$fifoname" ] && rm -f "$fifoname"
+    mkfifo "$fifoname"
+    if [ ! -p "$fifoname" ]; then
+        echo "Error: Could not create fifo \"$fifoname\"!" >&2
+        exit 1
+    fi
+    allfifos="$allfifos $fifoname"
+    allfiles="$allfiles $subname"
+    tcextract -i "$fifoname" -t vob -x $subtype -a "$sid" \
+        >"$subname" 2>/dev/null &
+done
+unset sid
+
+# Cat the DVD stream into all the fifos at once, thereby causing the
+# previously started extractors to rip each subtitle during a single
+# tccat (very much faster, especially if reading direct from DVD)
+
+tccat -i "$source" -T "$title",-1 | tee $allfifos >/dev/null &&
+echo "Initial rip from $source to $subtype subtitles completed."
+rm -f $allfifos
+unset allfifos
+
+# Discard any empty files
+
+errorcode=0
+nonemptyfiles=""
+for file in $allfiles; do
+    filesize=`du -bL $file | tail -n 1 | cut -f 1`
+    if [ "$filesize" != "0" ]; then
+        nonemptyfiles="$nonemptyfiles $file"
+    else
+        id=`echo "$file" | sed 's/.*\///' | cut -d. -f3`
+        echo "Warning: Subtitle track $id came out empty!" >&2
+        errorcode=1
+        rm -f "$file"
+    fi
+done
+allfiles=`echo $nonemptyfiles`
+unset nonemptyfiles
+
+# > LGHI Try to double languages infos if files are double of known languages
+subscount=$(echo "${allsubs}" | wc -l)
+filescount=$(echo "${allfiles}" | wc -l)
+
+if [ $[ subscount+subscount ] -le $filescount ]
+then
+  double=1
+  echo "Found double files, double the language selectors."
+else
+  double=0
+fi
+# < LGHI
+
+# Convert the extracted non-empty subtitles to vobsub and re-index them
+
+[ -z "$prefix" ] && prefix="$dvdname"
+newid=0
+for file in $allfiles; do
+    id=$(echo "$file" | sed 's/.*\///' | cut -d. -f3 | sed "s/0\?\([0-9]*\)/\1/g")
+    if echo "$id" | grep -qs '^0x[0-9A-F][0-9A-F]$'; then
+        lang=''
+        if [ -z "$reindex" ]; then
+            newid=`printf '%d' "$id"`
+            newid=`expr $newid - 32`
+        fi
+        echo "Converting subtitle track $newid ($id) from $subtype to vobsub..."
+        subfile="${prefix}${title}.vob.$(printf "%02d" $((${newid} + 1)))"
+        echo "Notice: The language of this track ($id) is unknown."
+        echo "        Edit \"$subfile.idx\" to specify a language."
+    else
+        if [ $double -eq 1 ]
+        then
+          lang=`echo "$allsubs" | awk -v subt=$id '$2 == (subt-subt%2)/2 {
+              if ($3 == "Language:")
+                  print $4
+              exit 0
+          }'`
+        else
+          lang=`echo "$allsubs" | awk -v subt=$id '$2 == subt {
+              if ($3 == "Language:")
+                  print $4
+              exit 0
+          }'`
+        fi
+        echo "Converting subtitle track $id ($lang) from $subtype to vobsub..."
+        [ -z "$reindex" ] && newid="$id"
+        subfile="${prefix}${title}.vob.$(printf "%02d" $((${newid} + 1)))"
+    fi
+    num=1
+    while [ -e "$subfile.idx" ]; do
+        echo "Warning: Output file \"$subfile.idx\" already exists!" >&2
+        num=`expr $num + 1`
+        subfile="$subfile.$num"
+    done
+    subtitle2vobsub -p "$file" -i "$titleifo" -o "$subfile"
+    if [ -e "$subfile.idx" ]; then
+        [ -n "$reindex" ] && echo "Re-indexing track $id as track $newid..."
+        if [ -n "$lang" ]; then
+            sed -i 's/^id: [a-z][a-z]/id: '"$lang"'/' "$subfile.idx"
+        fi
+        sed -i 's/index: [0-9][0-9]*/index: '"$newid"'/;
+                s/langidx: [0-9][0-9]*/langidx: '"$newid"'/;' "$subfile.idx"
+        [ -n "$reindex" ] && newid=`expr $newid + 1`
+    else
+        echo "Error: The creation of \"$subfile.idx\" failed!" >&2
+        errorcode=1
+    fi
+done
+
+exit $errorcode

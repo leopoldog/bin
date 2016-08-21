@@ -1,0 +1,36 @@
+#!/bin/bash
+
+let len=78
+USER=lghi
+
+while [ true ]
+do
+  let joke=$RANDOM%$(echo "select count(*) from citazione" \
+                     | \mysql -u $USER -Bsr citazioni)
+
+  echo "select concat(citazione,'\n- ',nome) from citazione,persona where citazione_id='$joke' and persona_id=id_persona" \
+  | \mysql -u $USER -Bsr citazioni \
+  | while read text
+  do
+    while [ ${#text} -gt $len ]
+    do
+      let pos=$len
+
+      while [ "${text:$pos:1}" != " " ]
+      do
+        let pos=$pos-1
+      done
+
+      echo ${text:0:$pos}
+      text=${text:$pos}
+    done
+
+    if [ "$text" == "- ?" ]
+    then
+      echo "select concat('- ',anonimo) from lingua,citazione where citazione_id='$joke' and id_lingua=lingua_id" \
+      | \mysql -u $USER -Bsr citazioni
+    else
+      echo $text
+    fi
+  done > /home/lghi/.sig/signature
+done

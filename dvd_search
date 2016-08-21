@@ -1,0 +1,28 @@
+#!/bin/bash
+
+DVD_LIST_FILE=~/"Documents/dvd/dvd_list.csv"
+TEMP_FILE="$(mktemp)"
+
+if [ -z "$1" ]
+then
+  echo "Usage: $0 <directory> [ <directory> ... ]"
+  exit -1
+fi
+
+for x in "$@"
+do
+  y="$(basename "$x" | sed "s/^[0-9X\.]*//g;s/{.*}//g;s/(.*)//g;s/«.*»//g;s/\(\.mkv\|\.vob\|\.flv\|\.avi\)//g;s/ *$//g;s/^ *//g;s/\\\\/\\\\\\\\/g")"
+
+  grep -qi "\(^[^{]*[0-9X]*\. \<$y\>\|"$'\t'"$y"$'\t'"\)" "$DVD_LIST_FILE"
+
+  if [ $? -ne 0 ]
+  then
+    echo -e "NOT FOUND: \"$y\""
+  else
+    echo -e "\nFOUND: \"$y\"" >> "$TEMP_FILE"
+    grep -i "\(^[^{]*[0-9X]*\. \<$y\>\|"$'\t'"$y"$'\t'"\)" "$DVD_LIST_FILE" >> "$TEMP_FILE"
+  fi
+done
+
+cat "$TEMP_FILE"
+rm -f "$TEMP_FILE"

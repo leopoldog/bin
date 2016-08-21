@@ -1,0 +1,30 @@
+#!/bin/bash
+
+TMP=/tmp/save.$$
+
+trap '\echo BREAK;\rm -f $TMP; exit' 2 3
+
+SAVEDIR=~/save
+witness=$SAVEDIR/witness
+SAVE=$SAVEDIR/`date +"%y%m%d%H%M%S"`.tgz
+
+\find ~/src  -name "*.c"   -newer $witness -print >  $TMP
+\find ~/src  -name "*.cc"  -newer $witness -print >> $TMP
+\find ~/src  -name "*.pgc" -newer $witness -print >> $TMP
+\find ~/src  -name "*.hh"  -newer $witness -print >> $TMP
+\find ~/src  -name "*.h"   -newer $witness -print >> $TMP
+\find ~/bin  -name "*"     -newer $witness -print >> $TMP
+\find ~/data -name "*"     -newer $witness -print >> $TMP
+ 
+\touch $witness
+
+declare -a savesize
+
+savesize=(`\wc -l $TMP`)
+
+if [ ${savesize[0]} != 0 ]
+then
+  \tar cvf - `\cat $TMP` | \gzip -fc9 > $SAVE
+fi
+
+\rm -f $TMP

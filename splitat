@@ -1,0 +1,53 @@
+#!/bin/bash
+
+file="$1"
+
+if [ ! -e "$file" -o ! -e "${file}.idx" ]
+then
+  if [ -z "$file" ]
+  then
+    file="<file>"
+  fi
+
+  echo "Usage: $0 <file> <frame> { <frame> }"
+  echo
+  echo "The files named \"$file\" and \"${file}.idx\" must exist."
+  exit -1
+fi
+
+shift
+args=( $(for x in $@
+         do
+           printf "%06d " $x;
+         done) )
+search=$(echo ${args[*]} | tr " " "|")
+
+list=( $(grep -E "^V [0-9]* (${search}) " "${file}.idx" \
+         | sed "s/.*I:\([0-9a-f]*\),.*/0x\1/g" \
+         | sed "s;^0x\([0-9a-f]*\)e$;0x\10;g" \
+         | grep -v "0x00000000") )
+
+if [ "${#args[*]}" -ne "${#list[*]}" ]
+then
+  echo "Split requested: ${args[*]}"
+  echo "Split found    : "$(grep -E "^V [0-9]* (${search}) " "${file}.idx" \
+                           | cut -d" " -f 3)
+  read -n 1 -p "Do you want to proceed? (Y/n)" q
+  echo
+
+  if [ "$q" != "y" -a "$q" != "Y" ]
+  then
+    echo "Operation aborted"
+    exit -1
+  fi
+fi
+
+if [ ! -z "${list[*]}" ]
+then
+  IFS=,
+  split2 "$file" -p "${list[*]}"
+else
+  echo "Nothing to do"
+fi
+
+exit 0

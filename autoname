@@ -1,0 +1,40 @@
+#!/bin/bash
+
+if [ -z "$*" ]
+then
+  echo "Specify the titles files"
+  exit -1
+fi
+
+ls *[0-9][xX][0-9]* \
+   *[sS][0-9]*[eE][0-9]* 2>/dev/null \
+| while read file
+  do
+    f=( $(echo "$file" | tr "[:upper:]" "[:lower:]" | sed -n "s/.*s0*\([0-9]\+\)e0*\([0-9]\+\).*\.\([a-z1-9]\{3\}\)$/\1 \2 \3/p") )
+    t=""
+
+    if [ -z "$f" ]
+    then
+      f=( $(echo "$file" | tr "[:upper:]" "[:lower:]" | sed -n "s/.*\(0*[0-9]\+\)x\(0*[0-9]\+\).*\.\([a-z1-9]\{3\}\)$/\1 \2 \3/p") )
+    fi
+
+    if [ ! -z "$f" ]
+    then
+      t="$(basename "$(grep -h "\[0*${f[0]}|0*${f[1]}\]" "$@" | head -n 1)" | sed "s/\(\.avi\|\.mkv\|\.vob\|.mp4\|\.mp3\)$//g")"
+
+      if [ ! -z "$t" ]
+      then
+        ext=""
+        pass=1
+
+        while [ -e "$file" ]
+        do
+          mv -n "$file" "$t$ext.${f[2]}"
+          let pass=pass+1
+          ext=" «@$pass»"
+        done
+      else
+        echo "Unable to rename: $file"
+      fi
+    fi
+  done

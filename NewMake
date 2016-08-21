@@ -1,0 +1,56 @@
+#!/bin/bash
+# $Id: NewMake,v 1.1.1.1 2014-07-17 20:34:05 lghi Exp $
+# $Author: lghi $
+# $Locker:  $
+# $Log: NewMake,v $
+# Revision 1.1.1.1  2014-07-17 20:34:05  lghi
+#
+#
+# Revision 2.0.1.1  2000/06/28 17:21:13  lghi
+# Namespace version, no modifications made
+#
+# Revision 2.0  2000/04/26 13:33:03  rcom_vs
+# Modifications pour Valais
+#
+# Revision 1.2  2000/04/10 15:49:31  rcom_vs
+# Enhaced RCS creation
+#
+# Revision 1.1  2000/03/09 15:16:54  rcom_dev
+# Initial revision
+#
+
+curdir=`\pwd`
+dirname=`\basename $curdir`
+
+\chmod 775 .
+
+if [ -L ./Makefile -o ! -e ./Makefile ]
+then
+  \echo Creating ${curdir}/Makefile
+  \rm -f ./Makefile
+  \ln -s ~/bin/_Makefile_ ./Makefile
+else
+  \echo Skipping ${curdir}/Makefile
+fi
+
+if [ -d ~/RCS ]
+then
+  _TEMP=`\echo $HOME | \sed "s/\\\\//\\\\\\\\\\//g"`
+  FILE_PATH=`\echo $curdir | \sed "s/$_TEMP\\///g"`
+  \rm -f RCS
+  \mkdir ~/RCS/$FILE_PATH > /dev/null 2>&1
+  \ln -s ~/RCS/$FILE_PATH RCS
+fi
+
+if [ "$dirname" == "source" -o "$dirname" == "include" ]
+then
+  exit 0
+fi
+
+\ls -F | \grep "/$" |
+while read dir
+do
+  \cd $dir
+  $0
+  \cd - > /dev/null
+done

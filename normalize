@@ -1,0 +1,8 @@
+#!/bin/bash
+
+while test "$1" != ""
+do
+  VOL=`sox "${1}" -e stat -v 2>&1`
+  echo "sox -v $VOL \"${1}\" \"_${1}\""
+  shift
+done

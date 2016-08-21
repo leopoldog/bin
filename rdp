@@ -1,0 +1,740 @@
+#!/bin/bash
+
+PROGRAM_NAME=$(basename "$0")
+CONF_FILE=~/.rdp_passwd
+LOCK_FILE="${CONF_FILE}.lock"
+MENU_DIR_LOCAL=~/".local/share/applications"
+MENU_DIR_CONFIG=~/".config/menus"
+DESKTOP_DIR=~/".local/share/desktop-directories"
+SECURE_DIR=~/"secure"
+MENU_FILENAME="remote-access.menu"
+DIR_FILENAME="remote-access.directory"
+RDP_PANEL_SIZE=${RDP_PANEL_SIZE:=24}
+
+if [ -z "$GIO_LAUNCHED_DESKTOP_FILE_PID" ]
+then
+  INTERACTIVE=1
+else
+  INTERACTIVE=0
+fi
+
+# check dependencies
+for cmd in $PROGRAM_NAME ssh sshpass xmlindent nmap arp rdesktop gxmessage plock vncviewer gnome-terminal xrandr xdpyinfo
+do
+  TEMP=$(which $cmd)
+  eval "$(echo "$cmd" | sed "s/-//g" | tr "[:lower:]" "[:upper:]")=\"$TEMP\""
+
+  if [ ! -x "$TEMP" ]
+  then
+    echo "$cmd missing!"
+    exit -1
+  fi
+done
+
+getMacViaSSH()
+{
+  local CN="$1"
+  local IP_ADDRESS="$2"
+  local TEMP_FILE="$(mktemp -u)"
+
+  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
+
+  grep -q "not found" "$TEMP_FILE"
+
+  if [ $? -eq 1 ]
+  then
+    sed "s/^\([^[:space:]]\)/+++\1/g" "$TEMP_FILE" \
+    | tr "\n" " " \
+    | sed "s/+++/\n/g" \
+    | sed -n "s;.*link/ether *\([^[:space:]]\+\) .*${IP_ADDRESS}.*;\1;p"
+  else
+    cat "$TEMP_FILE" \
+    | tr "\n" " " \
+    | sed "s/VmKernel Nic/\nVmKernel Nic/g;s/\<\(${IP_ADDRESS}\)\>/\1\n/g" \
+    | grep "\<${IP_ADDRESS}\>" \
+    | sed "s/.*Mac Address\.*\([0-9a-f:]*\)[[:space:]].*/\1/g" \
+    | sort -u \
+    | head -n 1
+  fi
+
+  rm -f "$TEMP_FILE"
+}
+
+checkMacViaSSH()
+{
+  local CN="$1"
+  local MAC="$2"
+
+  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
+  | grep "\<\(${MAC}\)\>"
+}
+
+help()
+{
+  if [ ! -z "$1" ]
+  then
+    MSG="
+$PROGRAM_NAME: $1
+"
+  fi
+
+  MSG="$MSG
+Usage:
+  $PROGRAM_NAME [ -h0wluf ] [ -s <screen> ] [ -p <position> ] <alias> [ <username> ]
+  $PROGRAM_NAME [ -h0wluf ] [ -s <screen> ] [ -p <position> ] -a <menu>
+
+Open an rdp session to the specified host
+
+Options:
+  -0              Open a console session
+
+  -s <screen>     Open on the specified screen
+
+  -l              Lists the available screens (for use with s option) and environments (for use with a option)
+
+  -w              Open a wide screen spawning on both displays (if applicable)
+
+  -p <position>   Use the specified position as left side of the window
+
+  -h              Print this help
+
+  -u              Regenerate the list in the .local directory (this option only regenerates the files then stops execution)
+
+  -a <menu>       Open all machines specified in the given menu name
+
+  -f              Full screen (ignore menu bars height)
+
+The file ${CONF_FILE} contains the definitions of machines in the form:
+<menu> <alias> <type> <username> <password or - > <domain or - > <hostname or IP address> <MAC address>
+
+type is RDP, VNC or SSH depending on protocol to use (in this case username, password and domain must be set to "-".
+Specify the MAC address allow searching the machine on local network even if the address has changed.
+You must use IP addresses and not machines names to allow MAC scan work in all cases.
+"
+
+  echo "$MSG" >&2
+  [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+
+  if [ ! -z "$1" ]
+  then
+    exit 1
+  else
+    exit 0
+  fi
+}
+
+regenerate()
+{
+  echo "Create access description for : "
+
+  $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
+
+  OLD_LIST=$(grep -wrl "Exec=$RDP" "$MENU_DIR_LOCAL/"*.desktop)
+
+  mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}"
+  chmod 600 "${CONF_FILE}"
+
+  $XMLINDENT > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" <<!
+<!DOCTYPE Menu
+  PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
+  'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
+<Menu>
+    <Name>RemoteAccess</Name>
+    <Directory>remote-access.directory</Directory>
+    <DirectoryDir>/home/lghi/.local/share/desktop-directories</DirectoryDir>
+    <AppDir>/home/lghi/.local/share/applications</AppDir>
+    <DefaultLayout inline="false"/>$(sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;<Menu><Name>\1</Name><Directory>\1.directory</Directory><DirectoryDir>/home/lghi/.local/share/desktop-directories</DirectoryDir><AppDir>/home/lghi/.local/share/applications</AppDir><!--Entry:\1--></Menu>;g" "${CONF_FILE}" | sort -u | sed "s/></>\n</g")
+    <Layout>
+        <Merge type="menus"/>$(sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;<Menuname>\1</Menuname>;g" "${CONF_FILE}" | sort -u)
+        <Merge type="files"/>
+    </Layout>
+</Menu>
+!
+
+  cat > "${DESKTOP_DIR}/${DIR_FILENAME}" <<!
+[Desktop Entry]
+Comment=Remote Access
+Comment[it_CH]=Accesso Remoto
+Comment[fr_CH]=Accés Distant
+Encoding=UTF-8
+Icon=application-x-remote-connection
+Icon[it_CH]=application-x-remote-connection
+Icon[fr_CH]=application-x-remote-connection
+Name=Remote Access
+Name[it_CH]=Accesso Remoto
+Name[fr_CH]=Accés Distant
+Type=Directory
+Version=1.0
+NoDisplay=false
+!
+
+  sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;\1;g" "${CONF_FILE}" \
+  | sort -u \
+  | while read MENU
+    do
+      FILENAME="${DESKTOP_DIR}/${MENU}.directory"
+
+      if [ ! -z "${MENU}" -a ! -f "${FILENAME}" ]
+      then
+        cat > "${FILENAME}" <<!
+[Desktop Entry]
+Encoding=UTF-8
+Icon=folder
+Icon[it_CH]=folder
+Icon[fr_CH]=folder
+Type=Directory
+Version=1.0
+Name[it_CH]=${MENU}
+Name[fr_CH]=${MENU}
+Name=${MENU}
+Comment[it_CH]=${MENU}
+Comment[fr_CH]=${MENU}
+Comment=${MENU}
+!
+      fi
+    done
+
+  LIST=$(sed "s/#[^%].*//g;s/[[:space:]]\+/ /g;s/^\([^[:space:]]\+\)[[:space:]]\+\([^[:space:]]*\)[[:space:]]\+\([^[:space:]]\+\)[[:space:]]\+[^#]*/\1 \2 \3 /g" "${CONF_FILE}" \
+         | grep -v "^$" \
+         | sort -u \
+         | while read MENU ALIAS TYPE options
+         do
+           if [ ! -z "$ALIAS" ]
+           then
+             if [ "$TYPE" == "RDP" ]
+             then
+               ICON="application-x-remote-connection"
+             elif [ "$TYPE" == "VNC" ]
+             then
+               ICON="application-x-vnc"
+             elif [ "$TYPE" == "SSH" ]
+             then
+               ICON="utilities-terminal"
+             fi
+
+             NAME[0]="${ALIAS}"
+             OPT[0]="${ALIAS}"
+
+             if [ "$options" == "#%wide" ]
+             then
+               NAME[1]="${ALIAS}(wide)"
+               OPT[1]="-w ${ALIAS}"
+             else
+               NAME[1]=""
+               OPT[1]=""
+             fi
+
+             for i in 0 1
+             do
+               FILENAME="${MENU_DIR_LOCAL}/${NAME[i]}.desktop"
+               LIST="$LIST $FILENAME"
+
+               if [ -z "${NAME[i]}" ]
+               then
+                 break
+               fi
+
+               echo "${FILENAME}"
+
+               ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
+,s;\(<!--Entry:${MENU}-->\);<Include><Filename>$(basename ${FILENAME})</Filename></Include>\1;g
+wq
+!
+
+               cat > "${FILENAME}" <<!
+[Desktop Entry]
+Categories=RemoteAccess;
+Comment=
+Exec=$RDP ${OPT[i]}
+GenericName=
+Hidden=false
+Icon=${ICON}
+Name=${NAME[i]}
+NoDisplay=false
+Path=
+StartupNotify=true
+Terminal=0
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=
+!
+             done
+           fi
+         done)
+
+  echo "$LIST
+$OLD_LIST
+$OLD_LIST" \
+  | sort \
+  | uniq -c \
+  | while read op file
+    do
+      if [ "$f" != "$file" ]
+      then
+        case "$op" in
+          1) echo "Created  $(basename $file)"
+             ;;
+          2) echo "Deleted  $(basename $file)"
+             rm -f "$file"
+             ;;
+          3) echo "Replaced $(basename $file)"
+             ;;
+          *) echo "$file (INTERNAL ERROR)"
+             ;;
+        esac
+      fi
+
+      f="$file"
+    done \
+  | sort -k2
+
+  $XMLINDENT "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
+
+  chmod 600 "${CONF_FILE}"
+  rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
+
+  $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
+}
+
+checkMac()
+{
+  local MAC="${1//|/\\|}"
+  local LOCALNET=$2
+
+  MACSMB="${MAC//:/-}"
+  STATUS="$(nmblookup -R -S -A $ADDRESS)"
+
+  found=1
+
+  echo "$STATUS" | grep -iq "MAC Address = \(${MACSMB}\)"
+  if [ $? -eq 1 ]
+  then
+    if [ "$TYPE" != "RDP" ]
+    then
+      CN=${USERNAME}@${ADDRESS}
+
+      if [ -z "${OUSERNAME}" ]
+      then
+        CN=${ADDRESS}
+      fi
+
+      local GETMAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}")
+
+      echo "$GETMAC" | grep -q "\($MAC\)"
+
+      if [ "$?" -ne 0 ]
+      then
+        found=0
+      fi
+    else
+      found=0
+    fi
+  fi
+
+  if [ $found -eq 0 ]
+  then
+    IP_ADDRESS="$(echo "$STATUS" | sed -n "s/Looking up status of //p" | head -1)"
+
+    if [ "$LOCALNET" -eq 0 ]
+    then
+      SCAN=( $(ip addr | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" | grep -v "127\.0\.0\.1" | sort -u) )
+    else
+      SCAN=( $(echo $IP_ADDRESS | sed "s/\.[^.]*$/.*/g") )
+    fi
+
+    NMAPLIST=$($NMAP -n -sP "${SCAN[@]}")
+    NEW_ADDR=$($ARP -n | grep -i "${MAC}" | sed -n "s/^\([^ ]*\) .*/\1/p")
+
+    if [ -z "$NEW_ADDR" -a "$TYPE" != "RDP" ]
+    then
+      NEW_ADDR=$($NMAP -n -p 22 --open "${SCAN[@]}" \
+                 | tr "\n" " " \
+                 | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
+                 | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
+                 | while read ip_addr opened
+                   do
+                     if [ "$opened" == "open" ]
+                     then
+                       CN=${USERNAME}@${ip_addr}
+
+                       if [ -z "${OUSERNAME}" ]
+                       then
+                         CN=${ip_addr}
+                       fi
+
+                       if [ "$(checkMacViaSSH "${CN}" "${MAC}")" ]
+                       then
+                         echo $ip_addr
+                         break
+                       fi
+                     elif [ "$TYPE" != "SSH" ]
+                     then
+                       nmblookup -R -S -A $ip_addr \
+                       | grep -iq "MAC Address = \(${MACSMB}\)"
+
+                       if [ $? -eq 0 ]
+                       then
+                         echo $ip_addr
+                         break
+                       fi
+                     fi
+                   done)
+    fi
+
+    if [ ! -z "$NEW_ADDR" -a "$IP_ADDRESS" != "$NEW_ADDR" ]
+    then
+      $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
+      echo "Update configuration file ${CONF_FILE}" >&2
+      NEW_FILE="$(sed "s/^\([^#]\+\)${ADDRESS}[[:space:]]\+\(${MAC}\)[[:space:]]\?[^#]*/\1${NEW_ADDR}\t${MAC}\t/g" "${CONF_FILE}")"
+      cp -a "${CONF_FILE}" "${CONF_FILE}.old"
+      echo "$NEW_FILE" > "${CONF_FILE}"
+      $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
+    fi
+
+    ADDRESS=$NEW_ADDR
+  fi
+
+  if [ -z "$ADDRESS" ]
+  then
+    MSG="'$ALIAS' not found"
+    echo "$MSG" >&2
+    [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+    return 2
+  else
+    echo "Found $ADDRESS" >&2
+  fi
+
+  return 0
+}
+
+getMac()
+{
+  local MAC=$(nmblookup -R -S -A $ADDRESS \
+              | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
+              | tr "[:upper:]-" "[:lower:]:")
+
+  if [ -z "$MAC" -o "$MAC" == "00:00:00:00:00:00" ]
+  then
+    CN=${USERNAME}@${ADDRESS}
+
+    if [ -z "${OUSERNAME}" ]
+    then
+      CN=${ADDRESS}
+    fi
+
+    MAC=$($ARP -n -a "${IP_ADDRESS}" \
+          | sed -n "s;.*($IP_ADDRESS) at \([^ ]*\) \[ether\].*;\1;p")
+
+    if [ -z "$MAC" ]
+    then
+      MAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}")
+    fi
+  fi
+
+  if [ -z "$MAC" ]
+  then
+    echo "Unable to find MAC address" >&2
+  else
+    echo "Found MAC address '${MAC}'" >&2
+
+    $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
+    echo "Update configuration file ${CONF_FILE}" >&2
+    NEW_FILE="$(sed "s/^\([^#]\+\)${ADDRESS}[[:space:]]\?[^#]*/\1${ADDRESS}\t${MAC}\t/g" "${CONF_FILE}")"
+    cp -a "${CONF_FILE}" "${CONF_FILE}.old"
+    echo "$NEW_FILE" > "${CONF_FILE}"
+    $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
+  fi
+
+  echo "$MAC"
+
+  return 0
+}
+
+startViewer()
+{
+  ping -q -c 1 "$ADDRESS" > /dev/null
+
+  if [ $? -eq 0 -a ! -z "$ADDRESS" ]
+  then
+    case $TYPE in
+      RDP)
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z -P -xl ${CONSOLE} &
+        ;;
+
+      VNC)
+        $VNCVIEWER -name "${ALIAS}" -geometry ${SIZE} ${ADDRESS} &
+        ;;
+
+      SSH)
+        CN=${USERNAME}@${ADDRESS}
+
+        if [ -z "${OUSERNAME}" ]
+        then
+          CN=${ADDRESS}
+        fi
+
+        if [ -z "$OPASSWORD" ]
+        then
+          $GNOMETERMINAL --name "${ALIAS}" --tab --command "$SSH ${CN}" &
+        else
+          $GNOMETERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH ${CN}" &
+        fi
+        ;;
+    esac
+  else
+    MSG="Unable to open connection to machine '$ALIAS' because '$ADDRESS' is not responding."
+    echo "$MSG" >&2
+    [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+    return 1
+  fi
+
+  return 0
+}
+
+list()
+{
+  echo "Available displays:"
+
+  if [ "$HOSTNAME" = "yoko" ]
+  then
+    echo -e "\tLEFT\t-->\t1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE"
+    echo -e "\tRIGHT\t-->\t1280x1024+1680+0"
+  else
+    $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
+  fi
+
+  echo
+  echo "Available environments:"
+  sed -n "s/^#.*//g;s/^\([^[:space:]]*\)[[:space:]].*/\t\1/p" "${CONF_FILE}" | sort -u
+}
+
+startConnection()
+{
+  local MENU="$1"
+  local ALIAS="$2"
+  local TYPE="$3"
+  local USERNAME="$4"
+  local PASSWORD="$5"
+  local DOMAIN="$6"
+  local ADDRESS="$7"
+  local MAC="$8"
+  shift 8
+  local OPT_LIST="$@"
+
+  if [ "$USERNAME" == "-" ]
+  then
+    OUSERNAME=""
+  else
+    OUSERNAME="-u$USERNAME"
+  fi
+
+  echo "$OPT_LIST" | grep -q "autopass"
+
+  if [ "$?" -eq 0 ]
+  then
+    OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/rdp.conf)"
+  elif [ "$PASSWORD" == "-" ]
+  then
+    OPASSWORD=""
+  else
+    OPASSWORD="-p$PASSWORD"
+  fi
+
+  if [ "$DOMAIN" == "-" ]
+  then
+    ODOMAIN=""
+  else
+    ODOMAIN="-d$DOMAIN"
+  fi
+
+  IP_ADDRESS=$(ping -q -c 1 "$ADDRESS" \
+               | head -1 \
+               | sed "s/[^(]*(\([0-9.]\+\)).*/\1/g")
+
+  if [ ! -z "$MAC" ]
+  then
+    echo "$OPT_LIST" | grep -q "localnet"
+    checkMac "$MAC" $?
+  else
+    MAC=$(getMac)
+  fi
+
+  if [ ! -z "$ADDRESS" ]
+  then
+    startViewer
+  fi
+
+  return 0
+}
+
+if [ -z "$DISPLAY" ]
+then
+  echo >&2
+  echo "Can't open display" >&2
+  echo >&2
+  exit 3
+fi
+
+$XRANDR -q | grep -qw primary
+with_primary=$?
+
+unset SIZE
+unset CONSOLE
+
+ALIAS="[^[:space:]]\+"
+USERNAME="[^[:space:]]\+"
+MENUALIAS="[^[:space:]]\+"
+ALLMENU=0
+
+while getopts "h0wulfs:p:a" opt
+do
+  case $opt in
+    f) RDP_PANEL_SIZE=0
+       ;;
+
+    w) SIZE=$($XDPYINFO | sed -n "s/.*dimensions:.*[[:space:]]\([0-9]*\)x\([0-9]*\)[[:space:]].*/\1 \2/p" | while read x y; do echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; done | uniq)
+       ;;
+
+    0) CONSOLE="-0"
+       ;;
+
+    u) regenerate
+       exit 0
+       ;;
+
+    a) ALLMENU=1
+       ;;
+
+    s) if [ "$HOSTNAME" = "yoko" ]
+       then
+         case $OPTARG in
+           LEFT) SIZE=1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE
+              ;;
+           RIGHT) SIZE=1280x1024+1680+0
+              ;;
+           *) SIZE=""
+              ;;
+         esac
+       else
+         SIZE=$($XRANDR -q | grep "^${OPTARG}[[:space:]]\+connected" | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" | while read x y sx sy primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+${sx}+$[ sy + RDP_PANEL_SIZE ]; else echo ${x}x${y}+${sx}+${sy}; fi; done | uniq)
+       fi
+
+       if [ -z "$SIZE" ]
+       then
+         help "Display $OPTARG not found"
+       fi
+
+       ;;
+
+    l) list
+       exit 0
+       ;;
+
+    p) position=$(echo "$OPTARG" | sed -n "s/^\([0-9]*\)$/\1/p")
+
+       if [ -z "$position" ]
+       then
+         help "Invalid position specified: $position"
+       fi
+
+       SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | while read x y primary; do if [ "$primary" == "primary"  -o "$with_primary" == 1 ]; then echo $[ x - position ]x$[ y - 2 * RDP_PANEL_SIZE ]+${position}+$RDP_PANEL_SIZE; else echo $[ x - position ]x${y}+${position}+0; fi; done | uniq)
+       ;;
+
+    h) help
+       ;;
+
+    \?) help "Unknown option"
+        ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+if [ $ALLMENU -eq 0 ]
+then
+  ALIAS="$1"
+  USERNAME="$2"
+
+  if [ -z "${ALIAS}" ]
+  then
+    help "Missing machine alias"
+  fi
+
+  if [ -z "${USERNAME}" ]
+  then
+    USERNAME="[^[:space:]]\+"
+  fi
+else
+  MENUALIAS="$1"
+
+  if [ -z "${MENUALIAS}" ]
+  then
+    help "Missing menu name"
+  fi
+fi
+
+if [ -z "$SIZE" ]
+then
+  if [ "$HOSTNAME" = "yoko" ]
+  then
+    SIZE=1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE
+  else
+    SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | while read x y primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; else echo ${x}x${y}+0+0; fi; done | uniq)
+  fi
+fi
+
+ACCESS="$(stat -c %a "${CONF_FILE}")"
+
+if [ "${ACCESS:1}" -ne "00" ]
+then
+  MSG="The access right on ${CONF_FILE} are too permissive."
+  echo "$MSG" >&2
+  [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+  exit 4
+fi
+
+LIST=$(sed "s/#/\t#\t\t/g" "${CONF_FILE}" \
+       | grep -i "^$MENUALIAS[[:space:]]\+$ALIAS[[:space:]]\+\(RDP\|VNC\|SSH\)[[:space:]]\+$USERNAME[[:space:]]\+" \
+       | sort -u)
+
+if [ -z "$LIST" ]
+then
+  help "No machine found corresponding criteria"
+fi
+
+echo
+echo "Screen position: $SIZE"
+echo
+echo -n "Found $(echo "$LIST" | wc -l) machine(s) matching"
+echo
+
+\rm -f $(fuser -a -u ~/.rdesktop/cache/pstcache* 2>&1 | \grep -v "(lghi)$" | \sed "s/:$//g")
+
+echo "$LIST" \
+| while read MENU ALIAS TYPE USERNAME PASSWORD DOMAIN ADDRESS MAC OPTIONS
+do
+  if [ "${MAC}" == "#" ]
+  then
+    MAC=""
+  fi
+
+  OPT_LIST=$(echo "$OPTIONS" | tr " " "\n" | sed -n "s/%wide//g;s/%\(autopass\|localnet\)/\1/p" | sort -u)
+
+  (
+    startConnection "${MENU}" "${ALIAS}" "${TYPE}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${OPT_LIST}"
+
+    status=$?
+
+    if [ $status -eq 0 ]
+    then
+      echo "$status => OK"
+    else
+      echo "$status => NOK"
+    fi
+  ) &
+
+  sleep 1
+done
+
+wait
