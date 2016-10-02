@@ -226,7 +226,7 @@ Comment=${MENU}
 
              for i in 0 1
              do
-               FILENAME="${MENU_DIR_LOCAL}/${NAME[i]}.desktop"
+               FILENAME="${MENU_DIR_LOCAL}/${MENU}#${NAME[i]}.desktop"
                LIST="$LIST $FILENAME"
 
                if [ -z "${NAME[i]}" ]
