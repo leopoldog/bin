@@ -37,7 +37,7 @@ getMacViaSSH()
   local IP_ADDRESS="$2"
   local TEMP_FILE="$(mktemp -u)"
 
-  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
+  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
 
   grep -q "not found" "$TEMP_FILE"
 
