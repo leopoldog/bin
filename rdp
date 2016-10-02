@@ -215,7 +215,7 @@ Comment=${MENU}
              NAME[0]="${ALIAS}"
              OPT[0]="${ALIAS}"
 
-             if [ "$options" == "#%wide" ]
+             if [[ "$options" =~ "%wide" ]]
              then
                NAME[1]="${ALIAS}(wide)"
                OPT[1]="-w ${ALIAS}"
