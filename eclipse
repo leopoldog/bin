@@ -1,0 +1,10 @@
+#!/bin/bash
+
+find ~ -type f -wholename "*.metadata/*.launch" -exec grep -l "\/src\/test\/java" {} \; \
+| while read file
+  do
+    echo "Removing: $file"
+    rm "$file"
+  done
+
+/opt/eclipse/eclipse "$@"
