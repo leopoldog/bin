@@ -183,6 +183,7 @@ do
     then
       echo
       echo "Essential prime implicants obtained:"
+      echo "	${AVAILABLE_LETTERS:0:WIDTH}"
       echo "$essentialPrimeImplicants" | sed "s/^/	/"
     fi
 
@@ -190,6 +191,7 @@ do
     then
       echo
       echo "Optional prime implicants obtained:"
+      echo "	${AVAILABLE_LETTERS:0:WIDTH}"
       echo "$optionalPrimeImplicants" | sed "s/^/	/"
     fi
 
@@ -210,7 +212,6 @@ do
     echo
     echo "Please analyze the eventual algebric simplifications manually!"
     echo
-cat "${TEMP_FILE}"
     \rm -f "${TEMP_FILE}"
     exit 0
   fi
