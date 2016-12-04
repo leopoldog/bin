@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PROGRAM_NAME=$(basename "$0")
-CONF_FILE=~/.rdp_passwd
+CONF_FILE=~/".${PROGRAM_NAME}_passwd"
 LOCK_FILE="${CONF_FILE}.lock"
 MENU_DIR_LOCAL=~/".local/share/applications"
 MENU_DIR_CONFIG=~/".config/menus"
@@ -129,10 +129,10 @@ regenerate()
 
   $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
 
-  OLD_LIST=$(grep -wrl "Exec=$RDP" "$MENU_DIR_LOCAL/"*.desktop)
-
   mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}"
   chmod 600 "${CONF_FILE}"
+
+  OLD_LIST=$(grep -wrl "Exec=$RDP" "${MENU_DIR_LOCAL}/${PROGRAM_NAME}@"*.desktop 2>/dev/null)
 
   $XMLINDENT > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" <<!
 <!DOCTYPE Menu
@@ -226,7 +226,7 @@ Comment=${MENU}
 
              for i in 0 1
              do
-               FILENAME="${MENU_DIR_LOCAL}/${MENU}#${NAME[i]}.desktop"
+               FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
                LIST="$LIST $FILENAME"
 
                if [ -z "${NAME[i]}" ]
