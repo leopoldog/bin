@@ -1,0 +1,217 @@
+#!/bin/bash
+
+FILE="$1"
+AVAILABLE_LETTERS="abcdefghijklmnopqrstuvwxyz"
+
+help()
+{
+  cat <<!
+
+Usage: $0 <filename>
+
+Where the filename contains a sequence of words in binary to analyze with the Quine-McCluskey method.
+Example:
+  a file containing:
+	0001
+	0101
+	0110
+	0111
+	1101
+	1111
+
+  will return the following prime implicants:
+	0-01
+	011-
+	-1-1
+
+  and the corrisponding algebric formula:
+	!a!cd + !abc + bd
+
+Warning: The Quine-McCluskey algorithm is NP-hard, so be careful with the number of variables.
+         The maximum allowed for this program is ${#AVAILABLE_LETTERS}.
+!
+  exit -1
+}
+
+if [ -z "$FILE" ]
+then
+  help
+fi
+
+TEMP_FILE=$(mktemp)
+trap "\\echo BREAK;\\rm -f ${TEMP_FILE}; exit" 2 3 15
+
+getPotentialPrimeImplicant()
+{
+  local POSITION="$1"
+  local LINE="$2"
+  if [ "x${LINE:POSITION:1}x" == "x0x" ]
+  then
+    echo "${LINE:0:POSITION}[01]${LINE:POSITION+1}"
+  fi
+}
+
+checkIfToRetain()
+{
+  return $[ $(echo "$2" | grep -- "$1" | wc -l) != 2 ]
+}
+
+getAllPrimeImplicants()
+{
+  local elements="$1"
+  echo "${elements}" \
+  | while read line
+    do
+      for p in $(seq 0 $[WIDTH-1])
+      do
+        possibility=$(getPotentialPrimeImplicant $p "${line}")
+        if checkIfToRetain "$possibility" "$elements"
+        then
+          echo "$possibility"
+        fi
+      done
+  done
+}
+
+toAlgebricRepresentation()
+{
+  local elements="$1"
+  echo "${elements}" \
+  | while read LINE
+    do
+      for p in $(seq 0 $(echo "${#LINE}"))
+      do
+        if [ "x${LINE:p:1}x" == "x0x" ]
+        then
+          echo -n "!${AVAILABLE_LETTERS:p:1}"
+        elif [ "x${LINE:p:1}x" == "x1x" ]
+        then
+          echo -n "${AVAILABLE_LETTERS:p:1}"
+        fi
+      done
+      echo -n " + "
+    done \
+  | sed "s/ + $//"
+}
+
+getAllEssentialImplicants()
+{
+  local allPrimeImplicants="$1"
+
+  lines=$(sed -n "s/^[01]\+ \(O*\)XO*$/\1/p" "${TEMP_FILE}" \
+  | awk '{print length}' \
+  | sort -u)
+
+  for line in $lines
+  do
+    echo "${allPrimeImplicants}" | sed -n "$[line+1] p"
+    matcher=$(printf "%${line}s" | tr " " ".")
+    sed -i "/^[01]\+ ${matcher}X.*/ d" "${TEMP_FILE}"
+  done
+}
+
+getAllOptionalImplicants()
+{
+  local allPrimeImplicants="$1"
+  local essentialPrimeImplicants="$2"
+
+  if [ "$allPrimeImplicants" != "$essentialPrimeImplicants" -a -s "${TEMP_FILE}" ]
+  then
+    let n=-1
+    let max=-1
+    let found=$(sed "s/^[01]* //;s/\([OX]\)/ \1/g" ${TEMP_FILE} \
+                | rs -c' ' -T \
+                | sed "s/[ O]//g" \
+                | while read line
+                  do
+                    if [ $max -lt ${#line} ]
+                    then
+                      max=${#line}
+                      echo $n
+                    fi
+                    let n=n+1
+                  done \
+                | tail -n 1)
+
+    if [ $found -ge 0 ]
+    then
+      new=$(echo "${allPrimeImplicants}" | sed -n "$[found+1] p")
+      matcher=$(printf "%${found}s" | tr " " ".")
+      sed -i "/^[01]\+ ${matcher}X.*/ d" "${TEMP_FILE}"
+      echo "$new"
+      getAllOptionalImplicants "$allPrimeImplicants" "$essentialPrimeImplicants"$'\n'"$new"
+    fi
+  fi
+}
+
+prepareTempFile()
+{
+  local allPrimeImplicants="$1"
+  echo "$2" | sed "s/ //g;s/$/ /" > "${TEMP_FILE}"
+
+  echo "$allPrimeImplicants" \
+  | while read primeImplicant 
+    do
+      sed -i "s/$/O/" "${TEMP_FILE}"
+      grep -w "$(echo "$primeImplicant" | sed 's/-/[01]/g')" "${TEMP_FILE}" \
+      | while read line other
+        do
+          sed -i "s/\(${line}.*\)O/\1X/" "${TEMP_FILE}"
+        done
+    done
+}
+
+newElements=$(sed "s/[^01]//g" "${FILE}" | sort -u | grep -v "^$")
+allPossibilities="$newElements"
+let WIDTH=$(echo "$newElements" | head -n 1 | wc -c)-1
+while true
+do
+  elements=$(echo "$newElements" | sort -u)
+  echo "Number of elements to analyze: $(echo "$elements" | wc -l)"
+  primeImplicants="$(getAllPrimeImplicants "${elements}")"
+  newElements=$(echo "${primeImplicants}" | sed "s/\\[01\\]/-/g";
+                echo "${elements}" | grep -v -- "^\\($(echo "${primeImplicants}" | tr "\n" "|" | sed "s/|/\\\\|/g")\\)$")
+
+  if [ "$elements" == "$newElements" ]
+  then
+    allPrimeImplicants="$(echo "${newElements}" | grep -v "^$" | sort -u)"
+    prepareTempFile "$allPrimeImplicants" "$allPossibilities"
+    essentialPrimeImplicants=$(getAllEssentialImplicants "$allPrimeImplicants")
+    optionalPrimeImplicants=$(getAllOptionalImplicants "$allPrimeImplicants" "$essentialPrimeImplicants")
+
+    if [ ! -z "$essentialPrimeImplicants" ]
+    then
+      echo
+      echo "Essential prime implicants obtained:"
+      echo "$essentialPrimeImplicants" | sed "s/^/	/"
+    fi
+
+    if [ ! -z "$optionalPrimeImplicants" ]
+    then
+      echo
+      echo "Optional prime implicants obtained:"
+      echo "$optionalPrimeImplicants" | sed "s/^/	/"
+    fi
+
+    echo
+    echo "Algebric formula:"
+
+    if [ ! -z "$essentialPrimeImplicants" ]
+    then
+      echo "	$(toAlgebricRepresentation "${essentialPrimeImplicants}")"
+      PLUS="+ "
+    fi
+
+    if [ ! -z "$optionalPrimeImplicants" ]
+    then
+      echo "	$PLUS$(toAlgebricRepresentation "${optionalPrimeImplicants}")"
+    fi
+
+    echo
+    echo "Please analyze the eventual algebric simplifications manually!"
+    echo
+cat "${TEMP_FILE}"
+    \rm -f "${TEMP_FILE}"
+    exit 0
+  fi
+done
