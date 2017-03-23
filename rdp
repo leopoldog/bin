@@ -19,14 +19,19 @@ else
 fi
 
 # check dependencies
-for cmd in $PROGRAM_NAME ssh sshpass xmlindent nmap arp rdesktop gxmessage plock vncviewer gnome-terminal xrandr xdpyinfo
+for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xdpyinfo
 do
-  TEMP=$(which $cmd)
-  eval "$(echo "$cmd" | sed "s/-//g" | tr "[:lower:]" "[:upper:]")=\"$TEMP\""
+  VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
+
+  for cmd in $(echo ${def/*:/} | tr "," " ")
+  do
+    TEMP=$(which $cmd)
+    eval "$VAR_NAME=\"$TEMP\""
+  done
 
   if [ ! -x "$TEMP" ]
   then
-    echo "$cmd missing!"
+    echo "${def/*:} missing!" | sed "s/,/ and /g"
     exit -1
   fi
 done
@@ -37,7 +42,12 @@ getMacViaSSH()
   local IP_ADDRESS="$2"
   local TEMP_FILE="$(mktemp -u)"
 
-  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
+  if [ -z "$OPASSWORD" ]
+  then
+    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
+  else
+    $SSHPASS "$OPASSWORD" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
+  fi
 
   grep -q "not found" "$TEMP_FILE"
 
@@ -65,8 +75,14 @@ checkMacViaSSH()
   local CN="$1"
   local MAC="$2"
 
-  $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
-  | grep "\<\(${MAC}\)\>"
+  if [ -z "$OPASSWORD" ]
+  then
+    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
+    | grep "\<\(${MAC}\)\>"
+  else
+    $SSHPASS "$OPASSWORD" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
+    | grep "\<\(${MAC}\)\>"
+  fi
 }
 
 help()
@@ -476,9 +492,10 @@ startViewer()
 
         if [ -z "$OPASSWORD" ]
         then
-          $GNOMETERMINAL --name "${ALIAS}" --tab --command "$SSH ${CN}" &
+          $TERMINAL --name "${ALIAS}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
         else
-          $GNOMETERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH ${CN}" &
+          $SSHCOPYID "$CN"
+          $TERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
         fi
         ;;
     esac
