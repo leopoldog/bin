@@ -494,7 +494,7 @@ startViewer()
         then
           $TERMINAL --name "${ALIAS}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
         else
-          $SSHCOPYID "$CN"
+          $SSHPASS $OPASSWORD $SSHCOPYID -o StrictHostKeyChecking=no "$CN"
           $TERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
         fi
         ;;
