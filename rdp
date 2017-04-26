@@ -475,7 +475,7 @@ startViewer()
   then
     case $TYPE in
       RDP)
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z -P -xl ${CONSOLE} &
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z -P -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
         ;;
 
       VNC)
@@ -634,7 +634,7 @@ do
               ;;
          esac
        else
-         SIZE=$($XRANDR -q | grep "^${OPTARG}[[:space:]]\+connected" | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" | while read x y sx sy primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+${sx}+$[ sy + RDP_PANEL_SIZE ]; else echo ${x}x${y}+${sx}+${sy}; fi; done | uniq)
+         SIZE=$($XRANDR -q | grep "^${OPTARG}[[:space:]]\+connected" | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" | sort -rk5 | while read x y sx sy primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+${sx}+$[ sy + RDP_PANEL_SIZE ]; else echo ${x}x${y}+${sx}+${sy}; fi; done | uniq | head -n1)
        fi
 
        if [ -z "$SIZE" ]
@@ -655,7 +655,7 @@ do
          help "Invalid position specified: $position"
        fi
 
-       SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | while read x y primary; do if [ "$primary" == "primary"  -o "$with_primary" == 1 ]; then echo $[ x - position ]x$[ y - 2 * RDP_PANEL_SIZE ]+${position}+$RDP_PANEL_SIZE; else echo $[ x - position ]x${y}+${position}+0; fi; done | uniq)
+       SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | sort -rk3 | while read x y primary; do if [ "$primary" == "primary"  -o "$with_primary" == 1 ]; then echo $[ x - position ]x$[ y - 2 * RDP_PANEL_SIZE ]+${position}+$RDP_PANEL_SIZE; else echo $[ x - position ]x${y}+${position}+0; fi; done | uniq | head -n1)
        ;;
 
     h) help
@@ -697,7 +697,7 @@ then
   then
     SIZE=1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE
   else
-    SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | while read x y primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; else echo ${x}x${y}+0+0; fi; done | uniq)
+    SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | sort -rk3 | while read x y primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; else echo ${x}x${y}+0+0; fi; done | uniq | head -n1)
   fi
 fi
 
