@@ -9,7 +9,6 @@ DESKTOP_DIR=~/".local/share/desktop-directories"
 SECURE_DIR=~/"secure"
 MENU_FILENAME="remote-access.menu"
 DIR_FILENAME="remote-access.directory"
-RDP_PANEL_SIZE=${RDP_PANEL_SIZE:=24}
 
 if [ -z "$GIO_LAUNCHED_DESKTOP_FILE_PID" ]
 then
@@ -19,7 +18,7 @@ else
 fi
 
 # check dependencies
-for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xdpyinfo
+for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo
 do
   VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
 
@@ -35,6 +34,44 @@ do
     exit -1
   fi
 done
+
+RDP_TOP_PANEL=( $($XWININFO -tree -root | grep "Bottom Panel" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
+RDP_BOTTOM_PANEL=( $($XWININFO -tree -root | grep "Top Panel" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
+
+getGeometry()
+{
+  local WIN_SIZE
+  local display="$1"
+  local position="$2"
+
+  if [ "$display" == "full" ]
+  then
+    WIN_SIZE=$($XWININFO -root \
+               | sed -n "s/ *\(Width\|Height\): //p") 0 0
+  else
+    WIN_SIZE=$($XRANDR -q \
+               | grep -w "connected" \
+               | grep "^$display" \
+               | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" \
+               | sort -rk5)
+  fi
+
+  echo "${WIN_SIZE[*]}" | grep -qw primary
+  with_primary=$?
+
+  echo "$WIN_SIZE" \
+  | while read x y sx sy primary
+    do
+      if [ "$primary" == "primary" -o "$with_primary" == 1 ]
+      then
+        let y=y-RDP_TOP_PANEL[1]-RDP_BOTTOM_PANEL[1]
+        let sy=sy+RDP_TOP_PANEL[1]
+      fi
+      echo $[ x - position ]x${y}+$[ sx + position ]+${sy}
+    done \
+  | uniq \
+  | head -n1
+}
 
 getMacViaSSH()
 {
@@ -515,7 +552,7 @@ list()
 
   if [ "$HOSTNAME" = "yoko" ]
   then
-    echo -e "\tLEFT\t-->\t1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE"
+    echo -e "\tLEFT\t-->\t1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}"
     echo -e "\tRIGHT\t-->\t1280x1024+1680+0"
   else
     $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
@@ -541,7 +578,12 @@ startConnection()
 
   if [ "$USERNAME" == "-" ]
   then
-    OUSERNAME=""
+    if [ "$TYPE" == "RDP" ]
+    then
+      OUSERNAME="-u$(gxmessage -title "$ALIAS" -entry "Username")"
+    else
+      OUSERNAME=""
+    fi
   else
     OUSERNAME="-u$USERNAME"
   fi
@@ -553,7 +595,12 @@ startConnection()
     OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/rdp.conf)"
   elif [ "$PASSWORD" == "-" ]
   then
-    OPASSWORD=""
+    if [ "$TYPE" == "RDP" ]
+    then
+      OPASSWORD="-p$(gxmessage -title "$ALIAS" -entry "Password for user ${OUSERNAME:2}")"
+    else
+      OPASSWORD=""
+    fi
   else
     OPASSWORD="-p$PASSWORD"
   fi
@@ -593,9 +640,6 @@ then
   exit 3
 fi
 
-$XRANDR -q | grep -qw primary
-with_primary=$?
-
 unset SIZE
 unset CONSOLE
 
@@ -607,10 +651,11 @@ ALLMENU=0
 while getopts "h0wulfs:p:a" opt
 do
   case $opt in
-    f) RDP_PANEL_SIZE=0
+    f) RDP_TOP_PANEL=( 0 0 )
+       RDP_BOTTOM_PANEL=( 0 0 )
        ;;
 
-    w) SIZE=$($XDPYINFO | sed -n "s/.*dimensions:.*[[:space:]]\([0-9]*\)x\([0-9]*\)[[:space:]].*/\1 \2/p" | while read x y; do echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; done | uniq)
+    w) SIZE=$(getGeometry full 0)
        ;;
 
     0) CONSOLE="-0"
@@ -626,7 +671,7 @@ do
     s) if [ "$HOSTNAME" = "yoko" ]
        then
          case $OPTARG in
-           LEFT) SIZE=1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE
+           LEFT) SIZE=1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}
               ;;
            RIGHT) SIZE=1280x1024+1680+0
               ;;
@@ -634,7 +679,7 @@ do
               ;;
          esac
        else
-         SIZE=$($XRANDR -q | grep "^${OPTARG}[[:space:]]\+connected" | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" | sort -rk5 | while read x y sx sy primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+${sx}+$[ sy + RDP_PANEL_SIZE ]; else echo ${x}x${y}+${sx}+${sy}; fi; done | uniq | head -n1)
+         SIZE=$(getGeometry $OPTARG 0)
        fi
 
        if [ -z "$SIZE" ]
@@ -655,7 +700,7 @@ do
          help "Invalid position specified: $position"
        fi
 
-       SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | sort -rk3 | while read x y primary; do if [ "$primary" == "primary"  -o "$with_primary" == 1 ]; then echo $[ x - position ]x$[ y - 2 * RDP_PANEL_SIZE ]+${position}+$RDP_PANEL_SIZE; else echo $[ x - position ]x${y}+${position}+0; fi; done | uniq | head -n1)
+       SIZE=$(getGeometry "" $position)
        ;;
 
     h) help
@@ -695,9 +740,9 @@ if [ -z "$SIZE" ]
 then
   if [ "$HOSTNAME" = "yoko" ]
   then
-    SIZE=1680x$[ 1050 - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE
+    SIZE=1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}
   else
-    SIZE=$($XRANDR -q | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+0+0[[:space:]].*/\2 \3 \1/p" | sort -rk3 | while read x y primary; do if [ "$primary" == "primary" -o "$with_primary" == 1 ]; then echo ${x}x$[ y - 2 * RDP_PANEL_SIZE ]+0+$RDP_PANEL_SIZE; else echo ${x}x${y}+0+0; fi; done | uniq | head -n1)
+    SIZE=$(getGeometry "" 0)
   fi
 fi
 
