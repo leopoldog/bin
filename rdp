@@ -35,8 +35,8 @@ do
   fi
 done
 
-RDP_TOP_PANEL=( $($XWININFO -tree -root | grep "Bottom Panel" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
-RDP_BOTTOM_PANEL=( $($XWININFO -tree -root | grep "Top Panel" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
+RDP_TOP_PANEL=( $($XWININFO -tree -root | grep "Bottom Panel\|Pannello inferiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
+RDP_BOTTOM_PANEL=( $($XWININFO -tree -root | grep "Top Panel\|Pannello superiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
 
 getGeometry()
 {
@@ -549,15 +549,7 @@ startViewer()
 list()
 {
   echo "Available displays:"
-
-  if [ "$HOSTNAME" = "yoko" ]
-  then
-    echo -e "\tLEFT\t-->\t1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}"
-    echo -e "\tRIGHT\t-->\t1280x1024+1680+0"
-  else
-    $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
-  fi
-
+  $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
   echo
   echo "Available environments:"
   sed -n "s/^#.*//g;s/^\([^[:space:]]*\)[[:space:]].*/\t\1/p" "${CONF_FILE}" | sort -u
@@ -668,25 +660,12 @@ do
     a) ALLMENU=1
        ;;
 
-    s) if [ "$HOSTNAME" = "yoko" ]
-       then
-         case $OPTARG in
-           LEFT) SIZE=1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}
-              ;;
-           RIGHT) SIZE=1280x1024+1680+0
-              ;;
-           *) SIZE=""
-              ;;
-         esac
-       else
-         SIZE=$(getGeometry $OPTARG 0)
-       fi
+    s) SIZE=$(getGeometry $OPTARG 0)
 
        if [ -z "$SIZE" ]
        then
          help "Display $OPTARG not found"
        fi
-
        ;;
 
     l) list
@@ -738,12 +717,7 @@ fi
 
 if [ -z "$SIZE" ]
 then
-  if [ "$HOSTNAME" = "yoko" ]
-  then
-    SIZE=1680x$[ 1050 - RDP_TOP_PANEL[1] - RDP_BOTTOM_PANEL[1] ]+0+${RDP_TOP_PANEL[1]}
-  else
-    SIZE=$(getGeometry "" 0)
-  fi
+  SIZE=$(getGeometry "" 0)
 fi
 
 ACCESS="$(stat -c %a "${CONF_FILE}")"
