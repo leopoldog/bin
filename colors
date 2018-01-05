@@ -45,19 +45,23 @@ function printColors() {
 }
 
 echo -e "\e[1mColor map:\e[0m"
-echo -e "  \e[1mBase colors: (00-0F)\e[0m"
+echo -e "  \e[1mBase colors:\e[0m"
+echo -en "    \e[1mForeground: (38;5;0-15)\e[m\n  "
 printColors 38 0 16
 echo
+echo -en "    \e[1mBackground: (48;5;0-15)\e[m\n  "
 printColors 48 0 16
 echo
 echo
-echo -e "  \e[1mGray shades: (E8-FF)\e[0m"
+echo -e "  \e[1mGray shades:\e[0m"
+echo -en "    \e[1mForeground: (38;5;232-255)\e[m\n  "
 printColors 38 232 24
 echo
+echo -en "    \e[1mBackground: (48;5;232-255)\e[m\n  "
 printColors 48 232 24
 echo
 echo
-echo -e "            \e[1mForeground: (10-DF)\e[0m             \e[1mBackground: (10-DF)\e[0m"
+echo -e "            \e[1mForeground: (38;5;16-231)\e[0m       \e[1mBackground: (48;5;16-231)\e[0m"
 printf "        0    1    2    3    4    5      0    1    2    3    4    5\n"
 for base in $(seq 16 6 231)
 do
