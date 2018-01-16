@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/bin/bash -x
 
 PROGRAM_NAME=$(basename "$0")
-CONF_FILE=~/".${PROGRAM_NAME}_passwd"
-LOCK_FILE="${CONF_FILE}.lock"
+CONF_DIR=~/".rdp"
+LOCK_FILE="${CONF_DIR}.lock"
 MENU_DIR_LOCAL=~/".local/share/applications"
 MENU_DIR_CONFIG=~/".config/menus"
 DESKTOP_DIR=~/".local/share/desktop-directories"
@@ -18,7 +18,7 @@ else
 fi
 
 # check dependencies
-for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo
+for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo notify-send crudini
 do
   VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
 
@@ -105,6 +105,8 @@ getMacViaSSH()
   fi
 
   rm -f "$TEMP_FILE"
+
+  return 0
 }
 
 checkMacViaSSH()
@@ -157,7 +159,8 @@ Options:
 
   -f              Full screen (ignore menu bars height)
 
-The file ${CONF_FILE} contains the definitions of machines in the form:
+The directory ${CONF_DIR} contains the definitions of machines in the form:
+LGHI REVISE THIS
 <menu> <alias> <type> <username> <password or - > <domain or - > <hostname or IP address> <MAC address>
 
 type is RDP, VNC or SSH depending on protocol to use (in this case username, password and domain must be set to "-".
@@ -182,23 +185,25 @@ regenerate()
 
   $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
 
-  mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}"
-  chmod 600 "${CONF_FILE}"
+  mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}" "${CONF_DIR}"
+  chmod 700 "${CONF_DIR}"
 
   OLD_LIST=$(grep -wrl "Exec=$RDP" "${MENU_DIR_LOCAL}/${PROGRAM_NAME}@"*.desktop 2>/dev/null)
 
-  $XMLINDENT > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" <<!
+  local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
+
+  $XMLINDENT > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" 2>/dev/null <<!
 <!DOCTYPE Menu
   PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
   'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
 <Menu>
     <Name>RemoteAccess</Name>
     <Directory>remote-access.directory</Directory>
-    <DirectoryDir>/home/lghi/.local/share/desktop-directories</DirectoryDir>
-    <AppDir>/home/lghi/.local/share/applications</AppDir>
-    <DefaultLayout inline="false"/>$(sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;<Menu><Name>\1</Name><Directory>\1.directory</Directory><DirectoryDir>/home/lghi/.local/share/desktop-directories</DirectoryDir><AppDir>/home/lghi/.local/share/applications</AppDir><!--Entry:\1--></Menu>;g" "${CONF_FILE}" | sort -u | sed "s/></>\n</g")
+    <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>
+    <AppDir>${HOME}/.local/share/applications</AppDir>
+    <DefaultLayout inline="false"/>$(echo "$MENUS" | sed "s;\(.*\);<Menu>\n<Name>\1</Name>\n<Directory>\1.directory</Directory>\n<DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n<AppDir>${HOME}/.local/share/applications</AppDir>\n<!--Entry:\1-->\n</Menu>;g")
     <Layout>
-        <Merge type="menus"/>$(sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;<Menuname>\1</Menuname>;g" "${CONF_FILE}" | sort -u)
+        <Merge type="menus"/>$(echo "$MENUS" | sed "s;\(.*\);<Menuname>\1</Menuname>;g")
         <Merge type="files"/>
     </Layout>
 </Menu>
@@ -221,9 +226,7 @@ Version=1.0
 NoDisplay=false
 !
 
-  sed "s;#[^%].*;;g;s;[[:space:]]\+; ;g;s;^\([^[:space:]]\+\)[[:space:]]\+.*;\1;g" "${CONF_FILE}" \
-  | sort -u \
-  | while read MENU
+  for MENU in $MENUS
     do
       FILENAME="${DESKTOP_DIR}/${MENU}.directory"
 
@@ -247,54 +250,57 @@ Comment=${MENU}
       fi
     done
 
-  LIST=$(sed "s/#[^%].*//g;s/[[:space:]]\+/ /g;s/^\([^[:space:]]\+\)[[:space:]]\+\([^[:space:]]*\)[[:space:]]\+\([^[:space:]]\+\)[[:space:]]\+[^#]*/\1 \2 \3 /g" "${CONF_FILE}" \
-         | grep -v "^$" \
-         | sort -u \
-         | while read MENU ALIAS TYPE options
+  LIST=$(for MENU in $MENUS
          do
-           if [ ! -z "$ALIAS" ]
-           then
-             if [ "$TYPE" == "RDP" ]
-             then
-               ICON="application-x-remote-connection"
-             elif [ "$TYPE" == "VNC" ]
-             then
-               ICON="application-x-vnc"
-             elif [ "$TYPE" == "SSH" ]
-             then
-               ICON="utilities-terminal"
-             fi
-
-             NAME[0]="${ALIAS}"
-             OPT[0]="${ALIAS}"
-
-             if [[ "$options" =~ "%wide" ]]
-             then
-               NAME[1]="${ALIAS}(wide)"
-               OPT[1]="-w ${ALIAS}"
-             else
-               NAME[1]=""
-               OPT[1]=""
-             fi
-
-             for i in 0 1
+           $CRUDINI --get "${CONF_DIR}/${MENU}.conf" \
+           | while read ALIAS
              do
-               FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
-               LIST="$LIST $FILENAME"
+               PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
+               WIDE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" wide 2>/dev/null)"
 
-               if [ -z "${NAME[i]}" ]
+               if [ ! -z "$ALIAS" ]
                then
-                 break
-               fi
+                 if [ "$PROTOCOL" == "RDP" ]
+                 then
+                   ICON="application-x-remote-connection"
+                 elif [ "$PROTOCOL" == "VNC" ]
+                 then
+                   ICON="application-x-vnc"
+                 elif [ "$PROTOCOL" == "SSH" ]
+                 then
+                   ICON="utilities-terminal"
+                 fi
 
-               echo "${FILENAME}"
+                 NAME[0]="${ALIAS}"
+                 OPT[0]="${ALIAS}"
 
-               ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
+                 if [ "$WIDE" == "true" ]
+                 then
+                   NAME[1]="${ALIAS}(wide)"
+                   OPT[1]="-w ${ALIAS}"
+                 else
+                   NAME[1]=""
+                   OPT[1]=""
+                 fi
+
+                 for i in 0 1
+                 do
+                   FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
+                   LIST="$LIST $FILENAME"
+
+                   if [ -z "${NAME[i]}" ]
+                   then
+                     break
+                   fi
+
+                   echo "${FILENAME}"
+
+                   ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
 ,s;\(<!--Entry:${MENU}-->\);<Include><Filename>$(basename ${FILENAME})</Filename></Include>\1;g
 wq
 !
 
-               cat > "${FILENAME}" <<!
+                   cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
 Comment=
@@ -312,8 +318,9 @@ Type=Application
 X-KDE-SubstituteUID=false
 X-KDE-Username=
 !
+                 done
+               fi
              done
-           fi
          done)
 
   echo "$LIST
@@ -342,9 +349,8 @@ $OLD_LIST" \
     done \
   | sort -k2
 
-  $XMLINDENT "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
+  $XMLINDENT "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}" 2>/dev/null
 
-  chmod 600 "${CONF_FILE}"
   rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
 
   $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
@@ -352,7 +358,7 @@ $OLD_LIST" \
 
 checkMac()
 {
-  local MAC="${1//|/\\|}"
+  local MAC="$(echo "${1}" | sed "s/ //g;s/,/\\\\|/g")"
   local LOCALNET=$2
 
   MACSMB="${MAC//:/-}"
@@ -363,7 +369,7 @@ checkMac()
   echo "$STATUS" | grep -iq "MAC Address = \(${MACSMB}\)"
   if [ $? -eq 1 ]
   then
-    if [ "$TYPE" != "RDP" ]
+    if [ "$PROTOCOL" != "RDP" ]
     then
       CN=${USERNAME}@${ADDRESS}
 
@@ -399,7 +405,7 @@ checkMac()
     NMAPLIST=$($NMAP -n -sP "${SCAN[@]}")
     NEW_ADDR=$($ARP -n | grep -i "${MAC}" | sed -n "s/^\([^ ]*\) .*/\1/p")
 
-    if [ -z "$NEW_ADDR" -a "$TYPE" != "RDP" ]
+    if [ -z "$NEW_ADDR" -a "$PROTOCOL" != "RDP" ]
     then
       NEW_ADDR=$($NMAP -n -p 22 --open "${SCAN[@]}" \
                  | tr "\n" " " \
@@ -421,7 +427,7 @@ checkMac()
                          echo $ip_addr
                          break
                        fi
-                     elif [ "$TYPE" != "SSH" ]
+                     elif [ "$PROTOCOL" != "SSH" ]
                      then
                        nmblookup -R -S -A $ip_addr \
                        | grep -iq "MAC Address = \(${MACSMB}\)"
@@ -438,10 +444,9 @@ checkMac()
     if [ ! -z "$NEW_ADDR" -a "$IP_ADDRESS" != "$NEW_ADDR" ]
     then
       $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
-      echo "Update configuration file ${CONF_FILE}" >&2
-      NEW_FILE="$(sed "s/^\([^#]\+\)${ADDRESS}[[:space:]]\+\(${MAC}\)[[:space:]]\?[^#]*/\1${NEW_ADDR}\t${MAC}\t/g" "${CONF_FILE}")"
-      cp -a "${CONF_FILE}" "${CONF_FILE}.old"
-      echo "$NEW_FILE" > "${CONF_FILE}"
+      echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
+      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$NEW_ADDR"
+      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
       $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
     fi
 
@@ -452,7 +457,7 @@ checkMac()
   then
     MSG="'$ALIAS' not found"
     echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
     return 2
   else
     echo "Found $ADDRESS" >&2
@@ -492,10 +497,9 @@ getMac()
     echo "Found MAC address '${MAC}'" >&2
 
     $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
-    echo "Update configuration file ${CONF_FILE}" >&2
-    NEW_FILE="$(sed "s/^\([^#]\+\)${ADDRESS}[[:space:]]\?[^#]*/\1${ADDRESS}\t${MAC}\t/g" "${CONF_FILE}")"
-    cp -a "${CONF_FILE}" "${CONF_FILE}.old"
-    echo "$NEW_FILE" > "${CONF_FILE}"
+    echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
+    $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$ADDRESS"
+    $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
     $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
   fi
 
@@ -510,7 +514,7 @@ startViewer()
 
   if [ $? -eq 0 -a ! -z "$ADDRESS" ]
   then
-    case $TYPE in
+    case $PROTOCOL in
       RDP)
         $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z -P -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
         ;;
@@ -539,7 +543,7 @@ startViewer()
   else
     MSG="Unable to open connection to machine '$ALIAS' because '$ADDRESS' is not responding."
     echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
     return 1
   fi
 
@@ -552,25 +556,25 @@ list()
   $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
   echo
   echo "Available environments:"
-  sed -n "s/^#.*//g;s/^\([^[:space:]]*\)[[:space:]].*/\t\1/p" "${CONF_FILE}" | sort -u
+  ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
 }
 
 startConnection()
 {
   local MENU="$1"
   local ALIAS="$2"
-  local TYPE="$3"
+  local PROTOCOL="$3"
   local USERNAME="$4"
   local PASSWORD="$5"
   local DOMAIN="$6"
   local ADDRESS="$7"
   local MAC="$8"
-  shift 8
-  local OPT_LIST="$@"
+  local AUTOPASS="$9"
+  local LOCALNET="${10}"
 
-  if [ "$USERNAME" == "-" ]
+  if [ -z "$USERNAME" ]
   then
-    if [ "$TYPE" == "RDP" ]
+    if [ "$PROTOCOL" == "RDP" ]
     then
       OUSERNAME="-u$(gxmessage -title "$ALIAS" -entry "Username")"
     else
@@ -580,14 +584,12 @@ startConnection()
     OUSERNAME="-u$USERNAME"
   fi
 
-  echo "$OPT_LIST" | grep -q "autopass"
-
-  if [ "$?" -eq 0 ]
+  if [ "$AUTOPASS" == "true" ]
   then
     OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/rdp.conf)"
-  elif [ "$PASSWORD" == "-" ]
+  elif [ -z "$PASSWORD" ]
   then
-    if [ "$TYPE" == "RDP" ]
+    if [ "$PROTOCOL" == "RDP" ]
     then
       OPASSWORD="-p$(gxmessage -title "$ALIAS" -entry "Password for user ${OUSERNAME:2}")"
     else
@@ -597,7 +599,7 @@ startConnection()
     OPASSWORD="-p$PASSWORD"
   fi
 
-  if [ "$DOMAIN" == "-" ]
+  if [ -z "$DOMAIN" ]
   then
     ODOMAIN=""
   else
@@ -610,7 +612,7 @@ startConnection()
 
   if [ ! -z "$MAC" ]
   then
-    echo "$OPT_LIST" | grep -q "localnet"
+    [ "$LOCALNET" == "true" ]
     checkMac "$MAC" $?
   else
     MAC=$(getMac)
@@ -620,6 +622,34 @@ startConnection()
   then
     startViewer
   fi
+
+  return 0
+}
+
+getMachines()
+{
+  local MENUS="$1"
+  local ALIAS="${2:-.*}"
+  local USERNAME="${3}"
+
+  for m in $MENUS
+  do
+    for a in $($CRUDINI --get "${CONF_DIR}/${m}.conf" 2>/dev/null \
+               | grep -w "$ALIAS")
+    do
+      if [ ! -z "$USERNAME" ]
+      then
+        $CRUDINI --get "${CONF_DIR}/${m}.conf" "${a}" username 2>/dev/null \
+        | grep -wq "$USERNAME"
+        if [ $? -eq 0 ]
+        then
+          echo "$m $a"
+        fi
+      else
+        echo "$m $a"
+      fi
+    done
+  done
 
   return 0
 }
@@ -635,9 +665,9 @@ fi
 unset SIZE
 unset CONSOLE
 
-ALIAS="[^[:space:]]\+"
-USERNAME="[^[:space:]]\+"
-MENUALIAS="[^[:space:]]\+"
+ALIAS=""
+USERNAME=""
+MENUALIAS=""
 ALLMENU=0
 
 while getopts "h0wulfs:p:a" opt
@@ -701,11 +731,6 @@ then
   then
     help "Missing machine alias"
   fi
-
-  if [ -z "${USERNAME}" ]
-  then
-    USERNAME="[^[:space:]]\+"
-  fi
 else
   MENUALIAS="$1"
 
@@ -720,21 +745,26 @@ then
   SIZE=$(getGeometry "" 0)
 fi
 
-ACCESS="$(stat -c %a "${CONF_FILE}")"
+ACCESS="$(stat -c %a "${CONF_DIR}")"
 
 if [ "${ACCESS:1}" -ne "00" ]
 then
-  MSG="The access right on ${CONF_FILE} are too permissive."
+  MSG="The access right on ${CONF_DIR} are too permissive."
   echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+  [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
   exit 4
 fi
 
-LIST=$(sed "s/#/\t#\t\t/g" "${CONF_FILE}" \
-       | grep -i "^$MENUALIAS[[:space:]]\+$ALIAS[[:space:]]\+\(RDP\|VNC\|SSH\)[[:space:]]\+$USERNAME[[:space:]]\+" \
-       | sort -u)
+if [ -z "$MENUALIAS" ]
+then
+  MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
+else
+  MENUS="$MENUALIAS"
+fi
 
-if [ -z "$LIST" ]
+LIST=$(getMachines "$MENUS" "$ALIAS" "$USERNAME")
+
+if [ -z "${LIST}" ]
 then
   help "No machine found corresponding criteria"
 fi
@@ -742,23 +772,26 @@ fi
 echo
 echo "Screen position: $SIZE"
 echo
-echo -n "Found $(echo "$LIST" | wc -l) machine(s) matching"
+echo -n "Found $(echo ${LIST} | wc -l) machine(s) matching"
 echo
 
-\rm -f $(fuser -a -u ~/.rdesktop/cache/pstcache* 2>&1 | \grep -v "(lghi)$" | \sed "s/:$//g")
+# remove old cache stale files (if present)
+\rm -f $(fuser -a -u ~/.rdesktop/cache/pstcache* 2>&1 | \grep -v "(${USER})$" | \sed "s/:$//g")
 
 echo "$LIST" \
-| while read MENU ALIAS TYPE USERNAME PASSWORD DOMAIN ADDRESS MAC OPTIONS
+| while read MENU ALIAS
 do
-  if [ "${MAC}" == "#" ]
-  then
-    MAC=""
-  fi
-
-  OPT_LIST=$(echo "$OPTIONS" | tr " " "\n" | sed -n "s/%wide//g;s/%\(autopass\|localnet\)/\1/p" | sort -u)
+  PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
+  USERNAME="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" username 2>/dev/null)"
+  PASSWORD="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" password 2>/dev/null)"
+  DOMAIN="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" domain 2>/dev/null)"
+  ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
+  MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
+  AUTOPASS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" autopass 2>/dev/null)"
+  LOCALNET="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" localnet 2>/dev/null)"
 
   (
-    startConnection "${MENU}" "${ALIAS}" "${TYPE}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${OPT_LIST}"
+    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}"
 
     status=$?
 
