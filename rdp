@@ -443,11 +443,21 @@ checkMac()
 
     if [ ! -z "$NEW_ADDR" -a "$IP_ADDRESS" != "$NEW_ADDR" ]
     then
-      $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
-      echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
-      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$NEW_ADDR"
-      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
-      $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
+      n=$(echo "$NEW_ADDR" | wc -l)
+      if [ $n -gt 1 ]
+      then
+        MSG="Unable to find mac address for '$ALIAS', found $n correspondences.
+Please specify it manually!"
+        echo -e "\n\e[31m$MSG\e[0m\n" >&2
+        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
+        NEW_ADDR=$ADDRESS
+      else
+        $PLOCK -l "${LOCK_FILE}" > /dev/null 2>&1
+        echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
+        $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$NEW_ADDR"
+        $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
+        $PLOCK -u "${LOCK_FILE}" > /dev/null 2>&1
+      fi
     fi
 
     ADDRESS=$NEW_ADDR
@@ -460,7 +470,7 @@ checkMac()
     [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
     return 2
   else
-    echo "Found $ADDRESS" >&2
+    echo "Found $ALIAS => $ADDRESS" >&2
   fi
 
   return 0
@@ -535,7 +545,7 @@ startViewer()
         then
           $TERMINAL --name "${ALIAS}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
         else
-          $SSHPASS $OPASSWORD $SSHCOPYID -o StrictHostKeyChecking=no "$CN"
+          $SSHPASS $OPASSWORD $SSHCOPYID -o StrictHostKeyChecking=no "$CN" 2>/dev/null
           $TERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
         fi
         ;;
@@ -772,7 +782,8 @@ fi
 echo
 echo "Screen position: $SIZE"
 echo
-echo -n "Found $(echo ${LIST} | wc -l) machine(s) matching"
+echo "Found $(echo ${LIST} | wc -l) machine(s) matching:"
+echo "$LIST" | while read MENU ALIAS; do echo "$ALIAS"; done
 echo
 
 # remove old cache stale files (if present)
@@ -797,9 +808,9 @@ do
 
     if [ $status -eq 0 ]
     then
-      echo "$status => OK"
+      echo -e "\e[32mOK\e[0m"
     else
-      echo "$status => NOK"
+      echo -e "\e[31mNOK [Status: $status]\e[0m"
     fi
   ) &
 
