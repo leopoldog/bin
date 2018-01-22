@@ -46,8 +46,8 @@ getGeometry()
 
   if [ "$display" == "full" ]
   then
-    WIN_SIZE="$($XWININFO -root \
-                | sed -n "s/ *\(Width\|Height\): //p") 0 0"
+    WIN_SIZE=$(echo $($XWININFO -root \
+                      | sed -n "s/ *\(Width\|Height\): //p") 0 0)
   else
     WIN_SIZE=$($XRANDR -q \
                | grep -w "connected" \
@@ -56,10 +56,10 @@ getGeometry()
                | sort -rk5)
   fi
 
-  echo ${WIN_SIZE[*]} | grep -qw primary
+  echo "${WIN_SIZE[*]}" | grep -qw primary
   with_primary=$?
 
-  echo $WIN_SIZE \
+  echo "$WIN_SIZE" \
   | while read x y sx sy primary
     do
       if [ "$primary" == "primary" -o "$with_primary" == 1 ]
