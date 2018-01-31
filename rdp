@@ -586,7 +586,7 @@ startConnection()
   then
     if [ "$PROTOCOL" == "RDP" ]
     then
-      OUSERNAME="-u$(gxmessage -title "$ALIAS" -entry "Username")"
+      OUSERNAME="-u$($GXMESSAGE -center -title "$ALIAS" -entry "Username")"
     else
       OUSERNAME=""
     fi
@@ -601,7 +601,7 @@ startConnection()
   then
     if [ "$PROTOCOL" == "RDP" ]
     then
-      OPASSWORD="-p$(gxmessage -title "$ALIAS" -entry "Password for user ${OUSERNAME:2}")"
+      OPASSWORD="-p$($GXMESSAGE -center -title "$ALIAS" -entry "Password for user ${OUSERNAME:2}")"
     else
       OPASSWORD=""
     fi
