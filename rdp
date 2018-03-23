@@ -520,13 +520,21 @@ getMac()
 
 startViewer()
 {
+  local nocache=$1
+
   ping -q -c 1 "$ADDRESS" > /dev/null
 
   if [ $? -eq 0 -a ! -z "$ADDRESS" ]
   then
     case $PROTOCOL in
       RDP)
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z -P -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
+        if [ $nocache -eq 0 ]
+        then
+          CACHE=
+        else
+          CACHE=-P
+        fi
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
         ;;
 
       VNC)
@@ -581,6 +589,7 @@ startConnection()
   local MAC="$8"
   local AUTOPASS="$9"
   local LOCALNET="${10}"
+  local NOCACHE="${11}"
 
   if [ -z "$USERNAME" ]
   then
@@ -630,7 +639,8 @@ startConnection()
 
   if [ ! -z "$ADDRESS" ]
   then
-    startViewer
+    [ "$NOCACHE" == "true" ]
+    startViewer $?
   fi
 
   return 0
@@ -800,9 +810,10 @@ do
   MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
   AUTOPASS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" autopass 2>/dev/null)"
   LOCALNET="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" localnet 2>/dev/null)"
+  NOCACHE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" nocache 2>/dev/null)"
 
   (
-    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}"
+    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}"
 
     status=$?
 
