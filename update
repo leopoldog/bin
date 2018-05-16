@@ -27,6 +27,7 @@ TYPE=$(d="$(pwd -P)"
        done
       )
 
+echo -e "\e[38;5;245m############### Checking directory: \e[01;33m$PWD\e[00m"
 echo "Found a $TYPE repository. Updating."
 
 case "$TYPE" in
@@ -46,6 +47,7 @@ case "$TYPE" in
   *)
     echo "Not a recognised project"
     exit -1
-esac
+esac 2>&1 \
+| sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/'
 
 exit 0
