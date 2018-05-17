@@ -1,6 +1,7 @@
 #!/bin/bash
 
-TYPE=$(d="$(pwd -P)"
+TYPE=$(
+       d="$(pwd -P)"
 
        while true
        do

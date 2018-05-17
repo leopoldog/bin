@@ -1,0 +1,13 @@
+#!/bin/bash
+
+find . -xdev -type d -name ".git" \
+| while read f
+  do
+    pushd "$(dirname "$f")" > /dev/null 2>&1
+    echo -e "\e[38;5;245m############### Cleaning directory: \e[01;33m$PWD\e[00m"
+    git fetch -p
+    git gc
+    popd > /dev/null 2>&1
+    echo
+  done  2>&1 \
+| sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/'
