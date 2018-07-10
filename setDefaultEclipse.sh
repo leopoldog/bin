@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ECLIPSE_DEFAULT=~/bin/setDefaultEclipse.csv
+ECLIPSE_DEFAULT="${0/.sh/.csv}"
 
 # check dependencies
 for def in $PROGRAM_NAME crudini
@@ -15,17 +15,17 @@ do
 
   if [ ! -x "$TEMP" ]
   then
-    echo "${def/*:} missing!" | sed "s/,/ and /g"
+    echo -e "\e[01;31m${def/*:} missing! \e[00m" | sed "s/,/ and /g"
     exit -1
   fi
 done
 
 LIST=$(sed "s/ *#.*//g" ${ECLIPSE_DEFAULT} | cut -d$'\t' -f1 | sort -u)
 
-find ~ -name "org.eclipse.core.runtime" -type d | grep ".metadata/.plugins/org.eclipse.core.runtime" \
+find . -name "org.eclipse.core.runtime" -type d | grep "/.metadata/.plugins/org.eclipse.core.runtime" \
 | while read location
   do
-    echo "Changing: $location"
+    echo -e "\e[38;5;245mChanging: \e[01;33m$location\e[00m"
 
     sed "s/ *#.*//g" ${ECLIPSE_DEFAULT} \
     | grep -v "^$" \
