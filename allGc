@@ -1,6 +1,7 @@
 #!/bin/bash
 
 find . -xdev -type d -name ".git" \
+| sort -u \
 | while read f
   do
     pushd "$(dirname "$f")" > /dev/null 2>&1
