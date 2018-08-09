@@ -532,6 +532,7 @@ org.eclipse.ui.editors.prefs	AbstractTextEditor.Color.SelectionForeground	243,24
 org.eclipse.ui.editors.prefs	AbstractTextEditor.Color.SelectionForeground.SystemDefault	false
 org.eclipse.ui.editors.prefs	lineNumberRuler	true
 org.eclipse.ui.editors.prefs	spacesForTabs	true
+org.eclipse.ui.workbench.prefs	HYPERLINK_COLOR	32,224,224
 org.eclipse.wst.jsdt.core.prefs	org.eclipse.wst.jsdt.core.timeoutForParameterNameFromAttachedJavadoc	50
 org.eclipse.wst.jsdt.ui.prefs	org.eclipse.wst.jsdt.ui.visibility.order	B,V,R,D,
 org.eclipse.wst.jsdt.ui.prefs	outlinesortoption	T,I,F,C,M,
