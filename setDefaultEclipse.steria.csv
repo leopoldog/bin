@@ -539,6 +539,3 @@ org.eclipse.wst.jsdt.ui.prefs	outlinesortoption	T,I,F,C,M,
 org.eclipse.wst.xml.ui.prefs	xml_content_assist_default_page_sort_order	org.eclipse.wst.xml.ui.proposalCategory.xmlTags\u0000org.eclipse.wst.xml.ui.proposalCategory.xmlTemplates\u0000
 org.eclipse.wst.xml.ui.prefs	xml_content_assist_own_page_sort_order	org.eclipse.wst.xml.ui.proposalCategory.xmlTemplates\u0000org.eclipse.wst.xml.ui.proposalCategory.xmlTags\u0000
 org.jboss.tools.central.prefs	showJBossCentralOnStartup	false
-org.sonarlint.eclipse.core.prefs	servers/Zurich/auth	true
-org.sonarlint.eclipse.core.prefs	servers/Zurich/notificationsEnabled	false
-org.sonarlint.eclipse.core.prefs	servers/Zurich/url	http\://zrh-sonar1.ch.sterianet/sonar
