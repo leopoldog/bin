@@ -20,6 +20,7 @@ done
 
 
 find . -name ".default.settings" -type l \
+| sort -u \
 | while read settings
   do
     location=$(dirname "$settings")
