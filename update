@@ -51,6 +51,7 @@ case "$TYPE" in
 esac 2>&1 \
 | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
 | sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
-| sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
+| sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/' \
+| sed $'s/\\(At revision \\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
 
 exit 0
