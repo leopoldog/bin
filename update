@@ -1,5 +1,6 @@
 #!/bin/bash
 
+LC_ALL=en_US.UTF-8
 TYPE=$(
        d="$(pwd -P)"
 
@@ -28,30 +29,35 @@ TYPE=$(
        done
       )
 
+updateCVS() {
+  echo "Found a $TYPE repository. Updating."
+  cvs update -d -P "$@" 2>&1 \
+  | grep -v "^cvs update"
+}
+
+updateSVN() {
+  echo "Found a $TYPE repository. Updating."
+  svn update "$@" 2>&1 \
+  | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
+  | sed $'s/\\(At revision \|Updated to revision\\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
+}
+
+updateGIT() {
+  echo "Found a $TYPE repository. Updating."
+  git pull 2>&1 \
+  | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
+  | sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
+  | sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
+}
+
 echo -e "\e[38;5;245m############### Checking directory: \e[01;33m$PWD\e[00m"
-echo "Found a $TYPE repository. Updating."
 
 case "$TYPE" in
-  CVS)
-    cvs update -d -P "$@" 2>&1 \
-    | grep -v "^cvs update"
-    ;;
-
-  SVN)
-    svn update "$@"
-    ;;
-
-  GIT)
-    LC_ALL=en_US.UTF-8 git pull
-    ;;
-
-  *)
-    echo "Not a recognised project"
-    exit -1
-esac 2>&1 \
-| sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
-| sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
-| sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/' \
-| sed $'s/\\(At revision \\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
+  CVS) updateCVS "$@" ;;
+  SVN) updateSVN "$@" ;;
+  GIT) updateGIT "$@" ;;
+  *)   echo -e "\e[01;31mNot a recognised project\e[0m"
+       exit -1
+esac
 
 exit 0
