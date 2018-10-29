@@ -521,6 +521,12 @@ getMac()
 startViewer()
 {
   local nocache=$1
+  local screensize="$2"
+
+  if [ -z "$screensize" ]
+  then
+    screensize="${SIZE}"
+  fi
 
   ping -q -c 1 "$ADDRESS" > /dev/null
 
@@ -534,11 +540,11 @@ startViewer()
         else
           CACHE=-P
         fi
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${SIZE} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
         ;;
 
       VNC)
-        $VNCVIEWER -name "${ALIAS}" -geometry ${SIZE} ${ADDRESS} &
+        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} &
         ;;
 
       SSH)
@@ -590,6 +596,7 @@ startConnection()
   local AUTOPASS="$9"
   local LOCALNET="${10}"
   local NOCACHE="${11}"
+  local SCREENSIZE="${12}"
 
   if [ -z "$USERNAME" ]
   then
@@ -640,7 +647,7 @@ startConnection()
   if [ ! -z "$ADDRESS" ]
   then
     [ "$NOCACHE" == "true" ]
-    startViewer $?
+    startViewer $? "${SCREENSIZE}"
   fi
 
   return 0
@@ -811,9 +818,10 @@ do
   AUTOPASS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" autopass 2>/dev/null)"
   LOCALNET="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" localnet 2>/dev/null)"
   NOCACHE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" nocache 2>/dev/null)"
+  SCREENSIZE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" screensize 2>/dev/null)"
 
   (
-    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}"
+    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}" "${SCREENSIZE}"
 
     status=$?
 
