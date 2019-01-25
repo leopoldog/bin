@@ -18,7 +18,7 @@ else
 fi
 
 # check dependencies
-for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlindent nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo notify-send crudini
+for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo notify-send crudini
 do
   VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
 
@@ -192,7 +192,7 @@ regenerate()
 
   local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
 
-  $XMLINDENT > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" 2>/dev/null <<!
+  cat > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" 2>/dev/null <<!
 <!DOCTYPE Menu
   PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
   'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
@@ -349,7 +349,7 @@ $OLD_LIST" \
     done \
   | sort -k2
 
-  $XMLINDENT "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}" 2>/dev/null
+  cat "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}" 2>/dev/null
 
   rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
 

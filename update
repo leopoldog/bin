@@ -3,58 +3,72 @@
 LC_ALL=en_US.UTF-8
 LANG=$LC_ALL
 LANGUAGE=$LC_ALL
-TYPE=$(
-       d="$(pwd -P)"
-
-       while true
-       do
-         if [ -e "$d/.git" ]
-         then
-           echo "GIT"
-           break
-         elif [ -e "$d/.svn" ]
-         then
-           echo "SVN"
-           break
-         elif [ -e "$d/CVS" ]
-         then
-           echo "CVS"
-           break
-         fi
-
-         if [ "$d" == "/" ]
-         then
-           break
-         fi
-
-         d="$(dirname "$d")"
-       done
-      )
+TYPE=( $(
+         d="$(pwd -P)"
+  
+         while true
+         do
+           if [ -e "$d/.git" ]
+           then
+             echo "GIT" "$d"
+             break
+           elif [ -e "$d/.svn" ]
+           then
+             echo "SVN" "$d"
+             break
+           elif [ -e "$d/CVS" ]
+           then
+             echo "CVS" "$d"
+             break
+           fi
+  
+           if [ "$d" == "/" ]
+           then
+             break
+           fi
+  
+           d="$(dirname "$d")"
+         done
+        ) )
 
 updateCVS() {
-  echo "Found a $TYPE repository. Updating."
+  echo "Found a ${TYPE[0]} repository. Updating."
   cvs update -d -P "$@" 2>&1 \
   | grep -v "^cvs update"
 }
 
 updateSVN() {
-  echo "Found a $TYPE repository. Updating."
+  echo "Found a ${TYPE[0]} repository. Updating."
   svn update "$@" 2>&1 \
   | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
   | sed $'s/\\(At revision \|Updated to revision\\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
 }
 
 updateGIT() {
-  echo "Found a $TYPE repository. Updating."
+  echo "Found a ${TYPE[0]} repository. Updating."
   git pull 2>&1 \
   | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
   | sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
   | sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
+
+  grep branch "${TYPE[1]}/.git/config" \
+  | sed "s/^\[//g;s/\]$//g" \
+  | while read b n
+    do
+      sed "s/^[\t ]\+//g" "${TYPE[1]}/.git/config" \
+      | crudini --get - "branch $n" \
+      | grep -q rebase
+
+      if [ $? -ne 0 ]
+      then
+        echo -e "\e[01;33mBranch $n not set with rebase flag.\e[0m"
+      fi
+    done
 }
 
 echo -e "\e[38;5;245m############### Checking directory: \e[01;33m$PWD\e[00m"
 
-case "$TYPE" in
+case "${TYPE[0]}" in
   CVS) updateCVS "$@" ;;
   SVN) updateSVN "$@" ;;
   GIT) updateGIT "$@" ;;
