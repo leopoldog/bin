@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 
 find ~ -type f -wholename "*.metadata/*.launch" -exec grep -l "\/src\/test\/java" {} \; \
 | while read file
