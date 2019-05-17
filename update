@@ -55,11 +55,10 @@ updateGIT() {
   | sed "s/^\[//g;s/\]$//g" \
   | while read b n
     do
-      sed "s/^[\t ]\+//g" "${TYPE[1]}/.git/config" \
-      | crudini --get - "branch $n" \
-      | grep -q rebase
-
-      if [ $? -ne 0 ]
+      if [ "$(git config --get branch.${n//\"/}.rebase)" != "true" \
+        -a "$(git config --local  --get pull.rebase)" != "true" \
+        -a "$(git config --global --get pull.rebase)" != "true" \
+        -a "$(git config --system --get pull.rebase)" != "true" ]
       then
         echo -e "\e[01;33mBranch $n not set with rebase flag.\e[0m"
       fi
