@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. $(dirname "$0")/library.sh
+
 PROGRAM_NAME=$(basename "$0")
 CONF_DIR=~/".rdesktop"
 LOCK_FILE="${CONF_DIR}.lock"
@@ -17,23 +19,10 @@ else
   INTERACTIVE=0
 fi
 
-# check dependencies
-for def in $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage plock vncviewer terminal:gnome-terminal,mate-terminal xrandr xwininfo notify-send crudini
-do
-  VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
-
-  for cmd in $(echo ${def/*:/} | tr "," " ")
-  do
-    TEMP=$(which $cmd)
-    eval "$VAR_NAME=\"$TEMP\""
-  done
-
-  if [ ! -x "$TEMP" ]
-  then
-    echo "${def/*:} missing!" | sed "s/,/ and /g"
-    exit -1
-  fi
-done
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage plock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini
+then
+  exit -1
+fi
 
 RDP_TOP_PANEL=( $($XWININFO -tree -root | grep "Bottom Panel\|Pannello inferiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
 RDP_BOTTOM_PANEL=( $($XWININFO -tree -root | grep "Top Panel\|Pannello superiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )

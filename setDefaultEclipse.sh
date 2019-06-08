@@ -1,23 +1,11 @@
 #!/bin/bash
 
-# check dependencies
-for def in $PROGRAM_NAME crudini
-do
-  VAR_NAME=$(echo ${def/:*/} | sed "s/-//g" | tr "[:lower:]" "[:upper:]")
+. $(dirname "$0")/library.sh
 
-  for cmd in $(echo ${def/*:/} | tr "," " ")
-  do
-    TEMP=$(which $cmd)
-    eval "$VAR_NAME=\"$TEMP\""
-  done
-
-  if [ ! -x "$TEMP" ]
-  then
-    echo -e "\e[01;31m${def/*:} missing! \e[00m" | sed "s/,/ and /g"
-    exit -1
-  fi
-done
-
+if ! checkDependencies crudini
+then
+  exit -1
+fi
 
 find . -name ".default.settings" -type l \
 | sort -u \
