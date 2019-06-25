@@ -134,7 +134,8 @@ Options:
 
   -s <screen>     Open on the specified screen
 
-  -l              Lists the available screens (for use with s option) and environments (for use with a option)
+  -l [<menu>]     Lists the available screens (for use with s option) and environments (for use with a option)
+                  If a menu name is specified it lists all the machines in that menu item.
 
   -w              Open a wide screen spawning on both displays (if applicable)
 
@@ -565,11 +566,25 @@ startViewer()
 
 list()
 {
-  echo "Available displays:"
-  $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
-  echo
-  echo "Available environments:"
-  ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
+  local MENU="$1"
+
+  if [ -z "$MENU" ]
+  then
+    echo "Available displays:"
+    $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
+    echo
+    echo "Available environments:"
+    ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
+  else
+    CONF="${CONF_DIR}/${MENU}.conf"
+    if [ -f "${CONF}" ]
+    then
+      echo "Available machines for \"$MENU\" environment:"
+      $CRUDINI --get "${CONF}"
+    else
+      echo "Environment \"$MENU\" not found!"
+    fi
+  fi
 }
 
 startConnection()
@@ -714,7 +729,7 @@ do
        fi
        ;;
 
-    l) list
+    l) list "${@:$OPTIND}"
        exit 0
        ;;
 
