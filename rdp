@@ -191,9 +191,11 @@ regenerate()
     <Directory>remote-access.directory</Directory>
     <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>
     <AppDir>${HOME}/.local/share/applications</AppDir>
-    <DefaultLayout inline="false"/>$(echo "$MENUS" | sed "s;\(.*\);<Menu>\n<Name>\1</Name>\n<Directory>\1.directory</Directory>\n<DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n<AppDir>${HOME}/.local/share/applications</AppDir>\n<!--Entry:\1-->\n</Menu>;g")
+    <DefaultLayout inline="false"/>
+$(echo "$MENUS" | sed "s;\(.*\);    <Menu>\n        <Name>\1</Name>\n        <Directory>\1.directory</Directory>\n        <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n        <AppDir>${HOME}/.local/share/applications</AppDir>\n        <!--Entry:\1-->\n        <Layout>\n            <Merge type=\"menus\"/>\n            <!--Layout:\1-->\n            <Merge type=\"files\"/>\n        </Layout>\n    </Menu>;g")
     <Layout>
-        <Merge type="menus"/>$(echo "$MENUS" | sed "s;\(.*\);<Menuname>\1</Menuname>;g")
+        <Merge type="menus"/>
+$(echo "$MENUS" | sed "s;\(.*\);        <Menuname>\1</Menuname>;g")
         <Merge type="files"/>
     </Layout>
 </Menu>
@@ -285,10 +287,12 @@ Comment=${MENU}
 
                    echo "${FILENAME}"
 
-                   ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
-,s;\(<!--Entry:${MENU}-->\);<Include><Filename>$(basename ${FILENAME})</Filename></Include>\1;g
-wq
-!
+                   sed -i \
+"
+s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
+s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;
+" \
+"${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
 
                    cat > "${FILENAME}" <<!
 [Desktop Entry]
@@ -311,6 +315,33 @@ X-KDE-Username=
                  done
                fi
              done
+
+           FILENAME="${MENU_DIR_LOCAL}/rdp@${MENU}#ALL.desktop"
+           echo "${FILENAME}"
+           LIST="$LIST $FILENAME"
+           cat > "${FILENAME}" <<!
+[Desktop Entry]
+Categories=RemoteAccess;
+Comment=
+Exec=$RDP -a ${MENU}
+GenericName=
+Hidden=false
+Icon=dialog-question
+Name=Open all
+NoDisplay=false
+Path=
+StartupNotify=true
+Terminal=0
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=
+!
+           ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
+,s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>;g
+,s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>;g
+wq
+!
          done)
 
   echo "$LIST
