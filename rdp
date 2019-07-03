@@ -11,6 +11,7 @@ DESKTOP_DIR=~/".local/share/desktop-directories"
 SECURE_DIR=~/"secure"
 MENU_FILENAME="remote-access.menu"
 DIR_FILENAME="remote-access.directory"
+ERROR_FILE="${CONF_DIR}-error"
 
 if [ -z "$GIO_LAUNCHED_DESKTOP_FILE_PID" ]
 then
@@ -561,11 +562,11 @@ startViewer()
         else
           CACHE=-P
         fi
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} &
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} >> "${ERROR_FILE}" 2>&1 &
         ;;
 
       VNC)
-        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} &
+        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} >> "${ERROR_FILE}" 2>&1 &
         ;;
 
       SSH)
@@ -831,10 +832,17 @@ then
   help "No machine found corresponding criteria"
 fi
 
+NUM_FOUND=$(echo "${LIST}" | wc -l)
 echo
 echo "Screen position: $SIZE"
 echo
-echo "Found $(echo ${LIST} | wc -l) machine(s) matching:"
+echo -n "Found $NUM_FOUND matching machine"
+if [ $NUM_FOUND -ne 1 ]
+then
+  echo "(s):"
+else
+  echo ":"
+fi
 echo "$LIST" | while read MENU ALIAS; do echo "$ALIAS"; done
 echo
 
