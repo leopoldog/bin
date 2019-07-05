@@ -246,6 +246,7 @@ Comment=${MENU}
   LIST=$(for MENU in $MENUS
          do
            $CRUDINI --get "${CONF_DIR}/${MENU}.conf" \
+           | sort -u \
            | while read ALIAS
              do
                PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
