@@ -279,23 +279,16 @@ Comment=${MENU}
 
                  for i in 0 1
                  do
-                   FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
-                   LIST="$LIST $FILENAME"
-
                    if [ -z "${NAME[i]}" ]
                    then
                      break
                    fi
 
+                   FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
                    echo "${FILENAME}"
-
-                   sed -i \
-"
-s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
-s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;
-" \
-"${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
-
+                   sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
+                           s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
+                          "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2
                    cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
@@ -318,9 +311,11 @@ X-KDE-Username=
                fi
              done
 
-           FILENAME="${MENU_DIR_LOCAL}/rdp@${MENU}#ALL.desktop"
+           FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#ALL.desktop"
            echo "${FILENAME}"
-           LIST="$LIST $FILENAME"
+           sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
+                   s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
+                  "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2
            cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
@@ -338,11 +333,6 @@ TerminalOptions=
 Type=Application
 X-KDE-SubstituteUID=false
 X-KDE-Username=
-!
-           ed -s "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2 <<!
-,s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>;g
-,s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>;g
-wq
 !
          done)
 
