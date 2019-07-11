@@ -545,7 +545,8 @@ startViewer()
 
   if [ $? -eq 0 -a ! -z "$ADDRESS" ]
   then
-    case $PROTOCOL in
+    echo "${PROTOCOL} ${ALIAS}: $(date +"%Y-%m-%d %H:%M:%S") New session started" >> ${ERROR_FILE}
+    case ${PROTOCOL} in
       RDP)
         if [ $nocache -eq 0 ]
         then
@@ -553,11 +554,11 @@ startViewer()
         else
           CACHE=-P
         fi
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} >> "${ERROR_FILE}" 2>&1 &
+        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       VNC)
-        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} >> "${ERROR_FILE}" 2>&1 &
+        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       SSH)
