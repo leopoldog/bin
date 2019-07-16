@@ -20,13 +20,24 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage plock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage plock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
 then
   exit -1
 fi
 
-RDP_TOP_PANEL=( $($XWININFO -tree -root | grep "Bottom Panel\|Pannello inferiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
-RDP_BOTTOM_PANEL=( $($XWININFO -tree -root | grep "Top Panel\|Pannello superiore" | sed "s/ *\(0x[[:alnum:]]\+\) .*/\1/" | while read id; do $XWININFO -id $id | sed -n "s/ *\(Width\|Height\): //p"; done) )
+PANELS="$(LC_ALL=C \
+          ${XWININFO} -root -tree \
+          | grep -i "\"\(\(top\|bottom\|left\|right\) panel\|pannello \(superiore\|inferiore\|destro\|sinistro\)\)\"" \
+          | sed "s/ *\([^ ]*\) .*/\1/g" \
+          | while read id; \
+            do \
+              pos=$(${XWININFO} -id $id); \
+              echo $(echo "$pos" | sed -n "s/.*Absolute upper-left X: *\([0-9]*\)/\1/p"; \
+                     echo "$pos" | sed -n "s/.*Absolute upper-left Y: *\([0-9]*\)/\1/p"; \
+                     echo "$pos" | sed -n "s/.*Width: *\([0-9]*\)/\1/p"; \
+                     echo "$pos" | sed -n "s/.*Height: *\([0-9]*\)/\1/p"); \
+            done
+          )"
 
 getGeometry()
 {
@@ -36,15 +47,72 @@ getGeometry()
 
   if [ "$display" == "full" ]
   then
-    WIN_SIZE=$(echo $($XWININFO -root \
+    WIN_SIZE=$(echo $(${XWININFO} -root \
                       | sed -n "s/ *\(Width\|Height\): //p") 0 0)
   else
-    WIN_SIZE=$($XRANDR -q \
+    WIN_SIZE=$(${XRANDR} -q \
                | grep -w "connected" \
                | grep "^$display" \
                | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" \
                | sort -rk5)
   fi
+
+  BORDERS=( $( (
+                 echo "0 0 0"
+                 echo "${WIN_SIZE}" \
+                 | while read a b c d e
+                   do
+                     Xs=$c
+                     Xe=$(( $c + $a ))
+                     Xm=$(( ( $Xs + $Xe ) / 2 ))
+                     Ys=$d
+                     Ye=$(( $d + $b ))
+                     Ym=$(( ( $Ys + $Ye ) / 2 ))
+                     echo "$PANELS" \
+                     | grep -v "^$" \
+                     | while read a1 b1 c1 d1
+                       do
+                         X=$(( $a1 + $c1 / 2 ))
+                         Y=$(( $b1 + $d1 / 2 ))
+                         if [ $X -lt $Xe -a $X -ge $Xs -a $Y -lt $Ye -a $Y -ge $Ys ]
+                         then
+                           if [ $c1 -gt $d1 ]
+                           then
+                             if [ $b1 -gt $Ym ]
+                             then
+                               echo b 0 $d1
+                             else
+                               echo t 0 $d1
+                             fi
+                           else
+                             if [ $a1 -gt $Xm ]
+                             then
+                               echo r $c1 0
+                             else
+                               echo l $c1 0
+                             fi
+                           fi
+                         fi
+                       done
+                     done \
+               ) | (
+                    sumX=0
+                    sumY=0
+                    sumSX=0
+                    sumSY=0
+                    while read p x y
+                    do
+                      let sumX=sumX+x
+                      let sumY=sumY+y
+                      if [ "$p" == "l" -o "$p" == "t" ]
+                      then
+                        let sumSX=sumSX+x
+                        let sumSY=sumSY+y
+                      fi
+                    done
+                    echo "$sumX $sumY $sumSX $sumSY"
+                  )
+             ) )
 
   echo "${WIN_SIZE[*]}" | grep -qw primary
   with_primary=$?
@@ -52,12 +120,11 @@ getGeometry()
   echo "$WIN_SIZE" \
   | while read x y sx sy primary
     do
-      if [ "$primary" == "primary" -o "$with_primary" == 1 ]
-      then
-        let y=y-RDP_TOP_PANEL[1]-RDP_BOTTOM_PANEL[1]
-        let sy=sy+RDP_TOP_PANEL[1]
-      fi
-      echo $[ x - position ]x${y}+$[ sx + position ]+${sy}
+      let y=y-BORDERS[1]
+      let sy=sy+BORDERS[3]
+      let x=x-BORDERS[0]-position
+      let sx=sx+BORDERS[2]+position
+      echo ${x}x${y}+${sx}+${sy}
     done \
   | uniq \
   | head -n1
@@ -375,7 +442,7 @@ checkMac()
   local LOCALNET=$2
 
   MACSMB="${MAC//:/-}"
-  STATUS="$(nmblookup -R -S -A $ADDRESS)"
+  STATUS="$(${NMBLOOKUP} -R -S -A $ADDRESS)"
 
   found=1
 
@@ -442,7 +509,7 @@ checkMac()
                        fi
                      elif [ "$PROTOCOL" != "SSH" ]
                      then
-                       nmblookup -R -S -A $ip_addr \
+                       ${NMBLOOKUP} -R -S -A $ip_addr \
                        | grep -iq "MAC Address = \(${MACSMB}\)"
 
                        if [ $? -eq 0 ]
@@ -491,7 +558,7 @@ Please specify it manually!"
 
 getMac()
 {
-  local MAC=$(nmblookup -R -S -A $ADDRESS \
+  local MAC=$(${NMBLOOKUP} -R -S -A $ADDRESS \
               | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
               | tr "[:upper:]-" "[:lower:]:")
 
@@ -728,8 +795,7 @@ ALLMENU=0
 while getopts "h0wulfs:p:a" opt
 do
   case $opt in
-    f) RDP_TOP_PANEL=( 0 0 )
-       RDP_BOTTOM_PANEL=( 0 0 )
+    f) unset PANELS
        ;;
 
     w) SIZE=$(getGeometry full 0)
