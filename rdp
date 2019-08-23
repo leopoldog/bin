@@ -761,7 +761,7 @@ getMachines()
   for m in $MENUS
   do
     for a in $($CRUDINI --get "${CONF_DIR}/${m}.conf" 2>/dev/null \
-               | grep -w "$ALIAS")
+               | grep -iw "$ALIAS")
     do
       if [ ! -z "$USERNAME" ]
       then
