@@ -20,7 +20,7 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp rdesktop gxmessage flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp gxmessage flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
 then
   exit -1
 fi
@@ -625,7 +625,8 @@ startViewer()
         else
           CACHE=-P
         fi
-        $RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
+        #$RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
+        $XFREERDP /t:${ALIAS} ${OUSERNAME/-u/\/u:} ${OPASSWORD/-p/\/p:} ${ODOMAIN/-d/\/d:} /size:${screensize} /cert-tofu /bpp:16 /kbd:0x0000100C /v:${ADDRESS} -decorations /drive:"${USER},${HOME}" +clipboard /sound:sys:pulse /multimedia:sys:pulse ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       VNC)
