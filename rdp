@@ -806,7 +806,7 @@ do
     w) SIZE=$(getGeometry full 0)
        ;;
 
-    0) CONSOLE="-0"
+    0) CONSOLE="/admin"
        ;;
 
     u) regenerate
