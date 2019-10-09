@@ -244,7 +244,7 @@ regenerate()
 {
   echo "Create access description for : "
 
-  {
+  (
     $FLOCK $fd
 
     mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}" "${CONF_DIR}"
@@ -436,7 +436,7 @@ $OLD_LIST" \
     cat "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}" 2>/dev/null
 
     rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
-  } {fd}<"${LOCK_FILE}"
+  ) {fd}<"${LOCK_FILE}"
 }
 
 checkMac()
@@ -535,12 +535,12 @@ Please specify it manually!"
         [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
         NEW_ADDR=$ADDRESS
       else
-        {
+        (
           $FLOCK $fd
           echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
           $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$NEW_ADDR"
           $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
-        } {fd}<"${LOCK_FILE}"
+        ) {fd}<"${LOCK_FILE}"
       fi
     fi
 
@@ -589,12 +589,12 @@ getMac()
     echo "Unable to find MAC address" >&2
   else
     echo "Found MAC address '${MAC}'" >&2
-    {
+    (
       $FLOCK $fd
       echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
       $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$ADDRESS"
       $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
-    } {fd}<"${LOCK_FILE}"
+    ) {fd}<"${LOCK_FILE}"
   fi
 
   echo "$MAC"
