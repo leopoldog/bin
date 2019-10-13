@@ -20,7 +20,7 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp gxmessage flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
 then
   exit -1
 fi
@@ -230,7 +230,7 @@ You must use IP addresses and not machines names to allow MAC scan work in all c
 "
 
   echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && echo "$MSG" | $GXMESSAGE --center --title "rdp" --file -
+  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "rdp" --text "$MSG"
 
   if [ ! -z "$1" ]
   then
@@ -702,7 +702,7 @@ startConnection()
   then
     if [ "$PROTOCOL" == "RDP" ]
     then
-      OUSERNAME="-u$($GXMESSAGE -center -title "$ALIAS" -entry "Username")"
+      OUSERNAME="-u$($ZENITY --entry --title "$ALIAS" --text "Username")"
     else
       OUSERNAME=""
     fi
@@ -717,7 +717,7 @@ startConnection()
   then
     if [ "$PROTOCOL" == "RDP" ]
     then
-      OPASSWORD="-p$($GXMESSAGE -center -title "$ALIAS" -entry "Password for user ${OUSERNAME:2}")"
+      OPASSWORD="-p$($ZENITY --entry --hide-text --title "$ALIAS" --text "Password for user ${OUSERNAME:2}")"
     else
       OPASSWORD=""
     fi
