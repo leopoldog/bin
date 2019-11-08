@@ -60,6 +60,9 @@ getGeometry()
                | sort -rk5)
   fi
 
+  # This method gets the borders on the selected screen but it fails if the screens superposes
+  # I've found a way to avoid the case where the two displays show exactly the same image, but if the screens displays just a subimage of the main screen
+  # it still fails
   BORDERS=( $( (
                  echo "0 0 0"
                  echo "${WIN_SIZE}" \
@@ -83,27 +86,28 @@ getGeometry()
                            then
                              if [ $b1 -gt $Ym ]
                              then
-                               echo b 0 $d1
+                               echo b 0 $d1 $a $b $c $d
                              else
-                               echo t 0 $d1
+                               echo t 0 $d1 $a $b $c $d
                              fi
                            else
                              if [ $a1 -gt $Xm ]
                              then
-                               echo r $c1 0
+                               echo r $c1 0 $a $b $c $d
                              else
-                               echo l $c1 0
+                               echo l $c1 0 $a $b $c $d
                              fi
                            fi
                          fi
                        done
                      done \
+                 | sort -u
                ) | (
                     sumX=0
                     sumY=0
                     sumSX=0
                     sumSY=0
-                    while read p x y
+                    while read p x y a b c d
                     do
                       let sumX=sumX+x
                       let sumY=sumY+y
