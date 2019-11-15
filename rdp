@@ -6,7 +6,7 @@ PROGRAM_NAME=$(basename "$0")
 CONF_DIR=~/".rdesktop"
 LOCK_FILE="${CONF_DIR}/.lock"
 MENU_DIR_LOCAL=~/".local/share/applications"
-MENU_DIR_CONFIG=~/".config/menus"
+MENU_DIR_CONFIG=~/".config/menus/applications-merged"
 DESKTOP_DIR=~/".local/share/desktop-directories"
 SECURE_DIR=~/"secure"
 MENU_FILENAME="remote-access.menu"
@@ -263,6 +263,8 @@ regenerate()
   PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
   'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
 <Menu>
+  <Name>Merged</Name>
+  <Menu>
     <Name>RemoteAccess</Name>
     <Directory>remote-access.directory</Directory>
     <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>
@@ -274,6 +276,7 @@ $(echo "$MENUS" | sed "s;\(.*\);    <Menu>\n        <Name>\1</Name>\n        <Di
 $(echo "$MENUS" | sed "s;\(.*\);        <Menuname>\1</Menuname>;g")
         <Merge type="files"/>
     </Layout>
+  </Menu>
 </Menu>
 !
 
@@ -437,7 +440,7 @@ $OLD_LIST" \
       done \
     | sort -k2
 
-    cat "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}" 2>/dev/null
+    $XMLSTARLET fo "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
 
     rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
   ) {fd}<"${LOCK_FILE}"
