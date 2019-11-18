@@ -11,7 +11,8 @@ DESKTOP_DIR=~/".local/share/desktop-directories"
 SECURE_DIR=~/"secure"
 MENU_FILENAME="remote-access.menu"
 DIR_FILENAME="remote-access.directory"
-ERROR_FILE="${CONF_DIR}/error"
+ERROR_FILE_PREFIX="error"
+ERROR_FILE="${CONF_DIR}/${ERROR_FILE_PREFIX}-$(date --iso-8601).log"
 
 if [ -z "$GIO_LAUNCHED_DESKTOP_FILE_PID" ]
 then
@@ -948,5 +949,9 @@ do
 
   sleep 1
 done
+
+# Remove old error files
+find "${CONF_DIR}" -name "${ERROR_FILE_PREFIX}*.log" -mtime +30 -exec rm -f {} \;
+ln -f "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
 
 wait
