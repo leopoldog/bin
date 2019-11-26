@@ -251,6 +251,7 @@ regenerate()
 
   (
     $FLOCK $fd
+    local TEMP_FILE="$(mktemp -u)"
 
     mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}" "${CONF_DIR}"
     chmod 700 "${CONF_DIR}"
@@ -259,7 +260,7 @@ regenerate()
 
     local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
 
-    cat > "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" 2>/dev/null <<!
+    cat > "${TEMP_FILE}" 2>/dev/null <<!
 <!DOCTYPE Menu
   PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
   'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
@@ -367,7 +368,7 @@ Comment=${MENU}
                      echo "${FILENAME}"
                      sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
                              s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                            "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2
+                            "${TEMP_FILE}" >&2
                      cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
@@ -394,7 +395,7 @@ X-KDE-Username=
              echo "${FILENAME}"
              sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
                      s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                    "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" >&2
+                    "${TEMP_FILE}" >&2
              cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
@@ -441,9 +442,9 @@ $OLD_LIST" \
       done \
     | sort -k2
 
-    $XMLSTARLET fo "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
+    $XMLSTARLET fo "${TEMP_FILE}" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
 
-    rm -f "${MENU_DIR_CONFIG}/${MENU_FILENAME}.$$"
+    rm -f "$TEMP_FILE"
   ) {fd}<"${LOCK_FILE}"
 }
 
