@@ -1,0 +1,220 @@
+#!/bin/bash
+
+function printColors() {
+  local size=$1
+  local fgbg=$2
+  local start=$3
+  local prefix=$5
+  local end
+  local color
+  let end=$3+$4-1
+  for color in $(seq $start $end)
+  do
+    printf "${prefix}\e[${fgbg}%sm %-${size}s \e[0m" $color ${fgbg}$color
+  done
+}
+
+function formatting() {
+  echo -e "\e[1mFormatting: \\\\e[\e[3mn\e[23mm\e[0m"
+  echo -e "  +------------------------------------------+--------------------------------+"
+  echo -e "  |                   Set                    |            Reset               |"
+  echo -e "  +------------------------------------------+--------------------------------+"
+  echo -e "  |                                          |  0 : \e[0mDefault (all flags reset)\e[0m |"
+  echo -e "  |  1 : \e[1mBold\e[22m          2 : \e[2mDim\e[22m               | 22 : \e[22mNot Bold or Dim\e[0m           |"
+  echo -e "  |  3 : \e[3mItalic\e[23m                              | 23 : \e[23mNot Italic\e[0m                |"
+  echo -e "  |  4 : \e[4mUnderlined\e[24m   21 : \e[21mDouble underlined\e[24m | 24 : \e[24mNot Underlined\e[0m            |"
+  echo -e "  |  5 : \e[5mBlink\e[25m         6 : \e[6mRapid blink\e[25m       | 25 : \e[25mNot Blink\e[0m                 |"
+  echo -e "  |  7 : \e[7mInverted\e[27m                            | 27 : \e[27mNot Inverted\e[0m              |"
+  echo -e "  |  8 : \e[8mHidden\e[28m                              | 28 : \e[28mNot Hidden\e[0m                |"
+  echo -e "  |  9 : \e[9mStrikeout\e[29m                           | 29 : \e[29mNot Strikeout\e[0m             |"
+  echo -e "  | 11 : \e[10mFont 1\e[0m  ...  19 : \e[19mFont 9\e[0m            | 10 : \e[10mFont 0 (Default)\e[0m          |"
+  echo -e "  | 20 : \e[20mFraktur Font\e[10m                        |                                |"
+  echo -e "  | 51 : \e[51mFramed\e[54m       52 : \e[52mEncircled\e[54m         | 54 : \e[54mNot Framed or Encircled\e[0m   |"
+  echo -e "  | 53 : \e[53mOverlined\e[55m                           | 55 : \e[55mNot Overlined\e[0m             |"
+  echo -e "  +------------------------------------------+--------------------------------+"
+  echo
+}
+
+function colorCube3b() {
+  local step=2
+  local prefix
+  echo -e "  \e[1mColor cube 3bits: \\\\e[\e[3mn\e[23mm\e[0m"
+  echo -e "    +---------+------------+------------+"
+  echo -e "    |         | Foreground | Background |"
+  echo -e "    |  \e[34;1mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0     1    \e[39m|\e[30m 0     1    \e[0m|"
+  echo -e "    +--v--v---+------------+------------+"
+  for base in $(seq 30 $step 37)
+  do
+    printf "    | \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printColors 4 "" $base $step
+    printf "|"
+    printColors 4 "" $[ base+10 ] $step "$prefix"
+    echo "|"
+    prefix="\e[30m"
+  done
+  echo -e "    +---------+------------+------------+"
+  echo -e "    | \e[1mDefault\e[0m |     39     |     49     |"
+  echo -e "    +---------+------------+------------+"
+  echo
+}
+
+function colorCube3bBright() {
+  local step=2
+  echo -e "  \e[1mColor cube 3bits Bright: \\\\e[\e[3mn\e[23mm\e[0m"
+  echo -e "    +---------+------------+------------+"
+  echo -e "    |         | Foreground | Background |"
+  echo -e "    |  \e[34;1mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0     1    \e[39m|\e[30m 0     1    \e[0m|"
+  echo -e "    +--v--v---+------------+------------+"
+  for base in $(seq 90 $step 97)
+  do
+    printf "    | \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printColors 4 "" $base $step
+    printf "|"
+    printColors 4 "" $[ base+10 ] $step "\e[30m"
+    echo "|"
+  done
+  echo -e "    +---------+------------+------------+"
+  echo -e "    | \e[1mDefault\e[0m |     39     |     49     |"
+  echo -e "    +---------+------------+------------+"
+  echo
+}
+
+function colorCube4b() {
+  local step=2
+  local prefix
+  echo -e "  \e[1mColor cube 4bits: \\\\e[\e[3mn\e[23mm\e[0m"
+  echo -e "    +------------+------------------+------------------+"
+  echo -e "    |            |    Foreground    |    Background    |"
+  echo -e "    |  \e[1mI  \e[34mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0        1       \e[39m|\e[30m 0        1       \e[0m|"
+  echo -e "    +------------+------------------+------------------+"
+  for base in $(seq 0 $step 15)
+  do
+    printf "    |  %d \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/8)%2 ] $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printColors 7 38:5: $base $step
+    printf "|"
+    printColors 7 48:5: $base $step "$prefix"
+    echo "|"
+    prefix="\e[30m"
+  done
+  echo -e "    +------------+------------------+------------------+"
+  echo -e "    | \e[1mDefault\e[0m    |        39        |        49        |"
+  echo -e "    +------------+------------------+------------------+"
+  echo
+}
+
+function grayShades() {
+  local step=4
+  local prefix
+  echo -e "\e[1mGray shades: \\\\e[\e[3mn\e[23mm\e[0m (38:5:\e[1mG\e[0m or 48:5:\e[1mG\e[0m where \e[1mG\e[0m=232+Gray level from 0 to 23)\e[0m"
+  echo -e "  +----------------------------------------+----------------------------------------+"
+  echo -e "  |               Foreground               |               Background               |"
+  echo -e "  +----------------------------------------+----------------------------------------+"
+  for base in $(seq 232 $step 255)
+  do
+    printf "  |"
+    printColors 8 38:5: $base $step
+    printf "|"
+    printColors 8 48:5: $base $step "$prefix"
+    echo "|"
+    prefix="\e[30m"
+  done
+  echo -e "  +----------------------------------------+----------------------------------------+"
+  echo -e "  | \e[1mDefault\e[0m           39                   |                   49                   |"
+  echo -e "  +----------------------------------------+----------------------------------------+"
+  echo
+}
+
+function colorCube8b() {
+  local step=6
+  local prefix
+  echo -e "  \e[1mColor cube 8bits: \\\\e[\e[3mn\e[23mm\e[0m (<\e[31;1mR\e[39m>*36+<\e[32;1mG\e[39m>*6+<\e[34;1mB\e[39m>+16)\e[0m"
+  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo -e "    |         |                         Foreground                         |                         Background                         |"
+  echo -e "    |  \e[31;1mR  \e[32mG  \e[34mB\e[0m>\e[44;30m 0         1         2         3         4         5        |  0         1         2         3         4         5       \e[0m|"
+  echo -e "    +--v--v---+------------------------------------------------------------+------------------------------------------------------------+"
+  for base in $(seq 16 $step 231)
+  do
+    printf "    | \e[41;30m %d \e[42;30m %d \e[0m  |" $[ (base-16)/36 ] $[ ((base-16)/6)%6 ]
+    printColors 8 38:5: $base $step
+    printf "|"
+    printColors 8 48:5: $base $step "$prefix"
+    echo "|"
+    prefix="\e[30m"
+  done
+  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo -e "    | \e[1mDefault\e[0m |                             39                             |                             49                             |"
+  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo
+}
+
+function colorCube24b() {
+  echo -e "  \e[1mColor cube 24bits: \\\\e[\e[3mn\e[23mm\e[0m (where \e[31;1mR\e[39m, \e[32;1mG\e[39m and \e[34;1mB\e[0m are intensities from 0 to 255)"
+  echo -e "    Foreground: \\\\e[38:2:\e[31;1mR\e[39m:\e[32;1mG\e[39m:\e[34;1mB\e[0mm    Background: \\\\e[48:2:\e[31;1mR\e[39m:\e[32;1mG\e[39m:\e[34;1mB\e[0mm"
+  echo
+}
+
+function help() {
+  cat <<!
+
+Usage: $0 [OPTION]...
+Show ANSI codes.
+
+Options :
+  -h         display this help and exit
+
+  -a         show all color/flags tables.
+
+  -f         show the formatting flags.
+
+  -g         show the gray shades table.
+
+  -c depth   show the table for the specified color depth.
+             The depth can be one of:
+               3  : 3 bits colors
+               3b : 3 bits bright colors (not supported on all kind of terminals)
+               4  : 4 bits colors (includes intensity)
+               8  : 8 bits colors
+               24 : 24 bits colors (the table is not shown because too big, just a hint is given)
+
+All the codes can be chained to have a combined effect.
+Pay attention to reset the flags when you don't need anymore otherwise, the flag will extends on the next text.
+
+!
+  exit -1
+}
+
+[ -z "$1" ] && help
+
+while getopts "ac:fgh" opt
+do
+  case $opt in
+    f) FORMATTING=formatting ;;
+    g) GRAYSHADES=grayShades ;;
+    c) case $OPTARG in
+         3) COLORCUBE3B=colorCube3b ;;
+         3b) COLORCUBE3BBRIGHT=colorCube3bBright ;;
+         4) COLORCUBE4B=colorCube4b ;;
+         8) COLORCUBE8B=colorCube8b ;;
+         24) COLORCUBE24B=colorCube24b ;;
+       esac ;;
+    a) FORMATTING=formatting
+       GRAYSHADES=grayShades
+       COLORCUBE3B=colorCube3b
+       COLORCUBE3BALTERNATIVE=colorCube3bAlternative
+       COLORCUBE3BBRIGHT=colorCube3bBright
+       COLORCUBE8B=colorCube8b
+       COLORCUBE24B=colorCube24b
+       ;;
+    h) help ;;
+    \?) help ;;
+  esac
+done
+
+$FORMATTING
+$GRAYSHADES
+[ ! -z "$COLORCUBE3B$COLORCUBE4B$COLORCUBE3BBRIGHT$COLORCUBE8B$COLORCUBE24B" ] && echo -e "\e[1mColor map: (IBGR=Intensity,Blue,Green,Red)\e[0m"
+$COLORCUBE3B
+$COLORCUBE3BBRIGHT
+$COLORCUBE4B
+$COLORCUBE8B
+$COLORCUBE24B
