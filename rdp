@@ -21,7 +21,7 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip
 then
   exit -1
 fi
@@ -29,167 +29,7 @@ fi
 # Creates the lock file
 : >> "${LOCK_FILE}"
 
-PANELS="$(LC_ALL=C \
-          ${XWININFO} -root -tree \
-          | grep -i "\"\(\(top\|bottom\|left\|right\) panel\|pannello \(superiore\|inferiore\|destro\|sinistro\)\)\"" \
-          | sed "s/ *\([^ ]*\) .*/\1/g" \
-          | while read id; \
-            do \
-              pos=$(${XWININFO} -id $id); \
-              echo $(echo "$pos" | sed -n "s/.*Absolute upper-left X: *\([0-9]*\)/\1/p"; \
-                     echo "$pos" | sed -n "s/.*Absolute upper-left Y: *\([0-9]*\)/\1/p"; \
-                     echo "$pos" | sed -n "s/.*Width: *\([0-9]*\)/\1/p"; \
-                     echo "$pos" | sed -n "s/.*Height: *\([0-9]*\)/\1/p"); \
-            done
-          )"
-
-getGeometry()
-{
-  local WIN_SIZE
-  local display="$1"
-  local position="$2"
-
-  if [ "$display" == "full" ]
-  then
-    WIN_SIZE=$(echo $(${XWININFO} -root \
-                      | sed -n "s/ *\(Width\|Height\): //p") 0 0)
-  else
-    WIN_SIZE=$(${XRANDR} -q \
-               | grep -w "connected" \
-               | grep "^$display" \
-               | sed -n "s/.*connected[[:space:]]*\(primary\)\?[[:space:]]\+\([0-9]*\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\)[[:space:]].*/\2 \3 \4 \5 \1/p" \
-               | sort -rk5)
-  fi
-
-  # This method gets the borders on the selected screen but it fails if the screens superposes
-  # I've found a way to avoid the case where the two displays show exactly the same image, but if the screens displays just a subimage of the main screen
-  # it still fails
-  BORDERS=( $( (
-                 echo "0 0 0"
-                 echo "${WIN_SIZE}" \
-                 | while read a b c d e
-                   do
-                     Xs=$c
-                     Xe=$(( $c + $a ))
-                     Xm=$(( ( $Xs + $Xe ) / 2 ))
-                     Ys=$d
-                     Ye=$(( $d + $b ))
-                     Ym=$(( ( $Ys + $Ye ) / 2 ))
-                     echo "$PANELS" \
-                     | grep -v "^$" \
-                     | while read a1 b1 c1 d1
-                       do
-                         X=$(( $a1 + $c1 / 2 ))
-                         Y=$(( $b1 + $d1 / 2 ))
-                         if [ $X -lt $Xe -a $X -ge $Xs -a $Y -lt $Ye -a $Y -ge $Ys ]
-                         then
-                           if [ $c1 -gt $d1 ]
-                           then
-                             if [ $b1 -gt $Ym ]
-                             then
-                               echo b 0 $d1 $a $b $c $d
-                             else
-                               echo t 0 $d1 $a $b $c $d
-                             fi
-                           else
-                             if [ $a1 -gt $Xm ]
-                             then
-                               echo r $c1 0 $a $b $c $d
-                             else
-                               echo l $c1 0 $a $b $c $d
-                             fi
-                           fi
-                         fi
-                       done
-                     done \
-                 | sort -u
-               ) | (
-                    sumX=0
-                    sumY=0
-                    sumSX=0
-                    sumSY=0
-                    while read p x y a b c d
-                    do
-                      let sumX=sumX+x
-                      let sumY=sumY+y
-                      if [ "$p" == "l" -o "$p" == "t" ]
-                      then
-                        let sumSX=sumSX+x
-                        let sumSY=sumSY+y
-                      fi
-                    done
-                    echo "$sumX $sumY $sumSX $sumSY"
-                  )
-             ) )
-
-  echo "${WIN_SIZE[*]}" | grep -qw primary
-  with_primary=$?
-
-  echo "$WIN_SIZE" \
-  | while read x y sx sy primary
-    do
-      let y=y-BORDERS[1]
-      let sy=sy+BORDERS[3]
-      let x=x-BORDERS[0]-position
-      let sx=sx+BORDERS[2]+position
-      echo ${x}x${y}+${sx}+${sy}
-    done \
-  | uniq \
-  | head -n1
-}
-
-getMacViaSSH()
-{
-  local CN="$1"
-  local IP_ADDRESS="$2"
-  local TEMP_FILE="$(mktemp -u)"
-
-  if [ -z "$OPASSWORD" ]
-  then
-    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
-  else
-    $SSHPASS "$OPASSWORD" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" > "$TEMP_FILE" 2>&1
-  fi
-
-  grep -q "not found" "$TEMP_FILE"
-
-  if [ $? -eq 1 ]
-  then
-    sed "s/^\([^[:space:]]\)/+++\1/g" "$TEMP_FILE" \
-    | tr "\n" " " \
-    | sed "s/+++/\n/g" \
-    | sed -n "s;.*link/ether *\([^[:space:]]\+\) .*${IP_ADDRESS}.*;\1;p"
-  else
-    cat "$TEMP_FILE" \
-    | tr "\n" " " \
-    | sed "s/VmKernel Nic/\nVmKernel Nic/g;s/\<\(${IP_ADDRESS}\)\>/\1\n/g" \
-    | grep "\<${IP_ADDRESS}\>" \
-    | sed "s/.*Mac Address\.*\([0-9a-f:]*\)[[:space:]].*/\1/g" \
-    | sort -u \
-    | head -n 1
-  fi
-
-  rm -f "$TEMP_FILE"
-
-  return 0
-}
-
-checkMacViaSSH()
-{
-  local CN="$1"
-  local MAC="$2"
-
-  if [ -z "$OPASSWORD" ]
-  then
-    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
-    | grep "\<\(${MAC}\)\>"
-  else
-    $SSHPASS "$OPASSWORD" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
-    | grep "\<\(${MAC}\)\>"
-  fi
-}
-
-help()
+function help()
 {
   if [ ! -z "$1" ]
   then
@@ -245,7 +85,7 @@ You must use IP addresses and not machines names to allow MAC scan work in all c
   fi
 }
 
-regenerate()
+function regenerate()
 {
   echo "Create access description for : "
 
@@ -448,13 +288,13 @@ $OLD_LIST" \
   ) {fd}<"${LOCK_FILE}"
 }
 
-checkMac()
+function checkMac()
 {
   local MAC="$(echo "${1}" | sed "s/ //g;s/,/\\\\|/g")"
   local LOCALNET=$2
 
-  MACSMB="${MAC//:/-}"
-  STATUS="$(${NMBLOOKUP} -R -S -A $ADDRESS)"
+  local MACSMB="${MAC//:/-}"
+  local STATUS="$(${NMBLOOKUP} -R -S -A $ADDRESS)"
 
   found=1
 
@@ -463,14 +303,14 @@ checkMac()
   then
     if [ "$PROTOCOL" != "RDP" ]
     then
-      CN=${USERNAME}@${ADDRESS}
-
       if [ -z "${OUSERNAME}" ]
       then
         CN=${ADDRESS}
+      else
+        CN=${USERNAME}@${ADDRESS}
       fi
 
-      local GETMAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}")
+      local GETMAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}" "${OPASSWORD}")
 
       echo "$GETMAC" | grep -q "\($MAC\)"
 
@@ -489,48 +329,58 @@ checkMac()
 
     if [ "$LOCALNET" -eq 0 ]
     then
-      SCAN=( $(ip addr | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" | grep -v "127\.0\.0\.1" | sort -u) )
+      SCAN=( $($IP addr | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" | grep -v "127\.0\.0\.1" | sort -u) )
     else
       SCAN=( $(echo $IP_ADDRESS | sed "s/\.[^.]*$/.*/g") )
     fi
 
-    NMAPLIST=$($NMAP -n -sP "${SCAN[@]}")
+    NMAPLIST=$($NMAP -n -sP "${SCAN[@]}" | sed -n "s/Nmap scan report for \([0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\)/\1/p")
     NEW_ADDR=$($ARP -n | grep -i "${MAC}" | sed -n "s/^\([^ ]*\) .*/\1/p")
 
-    if [ -z "$NEW_ADDR" -a "$PROTOCOL" != "RDP" ]
+    if [ -z "$NEW_ADDR" ]
     then
-      NEW_ADDR=$($NMAP -n -p 22 --open "${SCAN[@]}" \
-                 | tr "\n" " " \
-                 | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
-                 | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
-                 | while read ip_addr opened
-                   do
-                     if [ "$opened" == "open" ]
-                     then
-                       CN=${USERNAME}@${ip_addr}
-
-                       if [ -z "${OUSERNAME}" ]
-                       then
-                         CN=${ip_addr}
-                       fi
-
-                       if [ "$(checkMacViaSSH "${CN}" "${MAC}")" ]
+      if [ "$PROTOCOL" == "RDP" ]
+      then
+        NEW_ADDR=$($NMAP -n -p 3389 --open "${SCAN[@]}" \
+                   | tr "\n" " " \
+                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
+                   | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
+                   | while read ip_addr opened
+                     do
+                       if [ "$opened" == "open" ] && ${NMBLOOKUP} -R -S -A $ip_addr | grep -iq "MAC Address = \(${MACSMB}\)"
                        then
                          echo $ip_addr
                          break
                        fi
-                     elif [ "$PROTOCOL" != "SSH" ]
-                     then
-                       ${NMBLOOKUP} -R -S -A $ip_addr \
-                       | grep -iq "MAC Address = \(${MACSMB}\)"
+                     done)
+      else
+        NEW_ADDR=$($NMAP -n -p 22 --open "${SCAN[@]}" \
+                   | tr "\n" " " \
+                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
+                   | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
+                   | while read ip_addr opened
+                     do
+                       if [ "$opened" == "open" ]
+                       then
+                         if [ -z "${OUSERNAME}" ]
+                         then
+                           CN=${ip_addr}
+                         else
+                           CN=${USERNAME}@${ip_addr}
+                         fi
 
-                       if [ $? -eq 0 ]
+                         if checkMacViaSSH "${CN}" "${MAC}" "${OPASSWORD}"
+                         then
+                           echo $ip_addr
+                           break
+                         fi
+                       elif [ "$PROTOCOL" != "SSH" ] && ${NMBLOOKUP} -R -S -A $ip_addr | grep -iq "MAC Address = \(${MACSMB}\)"
                        then
                          echo $ip_addr
                          break
                        fi
-                     fi
-                   done)
+                     done)
+      fi
     fi
 
     if [ ! -z "$NEW_ADDR" -a "$IP_ADDRESS" != "$NEW_ADDR" ]
@@ -540,7 +390,7 @@ checkMac()
       then
         MSG="Unable to find mac address for '$ALIAS', found $n correspondences.
 Please specify it manually!"
-        echo -e "\n\e[31m$MSG\e[0m\n" >&2
+        echo -e "\n${RED}$MSG${WHITE}\n" >&2
         [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
         NEW_ADDR=$ADDRESS
       else
@@ -569,7 +419,7 @@ Please specify it manually!"
   return 0
 }
 
-getMac()
+function getMac()
 {
   local MAC=$(${NMBLOOKUP} -R -S -A $ADDRESS \
               | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
@@ -577,19 +427,19 @@ getMac()
 
   if [ -z "$MAC" -o "$MAC" == "00:00:00:00:00:00" ]
   then
-    CN=${USERNAME}@${ADDRESS}
-
-    if [ -z "${OUSERNAME}" ]
-    then
-      CN=${ADDRESS}
-    fi
-
     MAC=$($ARP -n -a "${IP_ADDRESS}" \
           | sed -n "s;.*($IP_ADDRESS) at \([^ ]*\) \[ether\].*;\1;p")
 
     if [ -z "$MAC" ]
     then
-      MAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}")
+      if [ -z "${OUSERNAME}" ]
+      then
+        CN=${ADDRESS}
+      else
+        CN=${USERNAME}@${ADDRESS}
+      fi
+
+      MAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}" "${OPASSWORD}")
     fi
   fi
 
@@ -611,7 +461,7 @@ getMac()
   return 0
 }
 
-startViewer()
+function startViewer()
 {
   local nocache=$1
   local screensize="$2"
@@ -643,11 +493,11 @@ startViewer()
         ;;
 
       SSH)
-        CN=${USERNAME}@${ADDRESS}
-
         if [ -z "${OUSERNAME}" ]
         then
           CN=${ADDRESS}
+        else
+          CN=${USERNAME}@${ADDRESS}
         fi
 
         if [ -z "$OPASSWORD" ]
@@ -669,7 +519,7 @@ startViewer()
   return 0
 }
 
-list()
+function list()
 {
   local MENU="$1"
 
@@ -692,7 +542,7 @@ list()
   fi
 }
 
-startConnection()
+function startConnection()
 {
   local MENU="$1"
   local ALIAS="$2"
@@ -762,7 +612,7 @@ startConnection()
   return 0
 }
 
-getMachines()
+function getMachines()
 {
   local MENUS="$1"
   local ALIAS="${2:-.*}"
@@ -805,53 +655,32 @@ ALIAS=""
 USERNAME=""
 MENUALIAS=""
 ALLMENU=0
+unset full
+unset display
+unset wide
+unset position
 
 while getopts "h0wulfs:p:a" opt
 do
   case $opt in
-    f) unset PANELS
-       ;;
-
-    w) SIZE=$(getGeometry full 0)
-       ;;
-
-    0) CONSOLE="/admin"
-       ;;
-
     u) regenerate
        exit 0
-       ;;
-
-    a) ALLMENU=1
-       ;;
-
-    s) SIZE=$(getGeometry $OPTARG 0)
-
-       if [ -z "$SIZE" ]
-       then
-         help "Display $OPTARG not found"
-       fi
        ;;
 
     l) list "${@:$OPTIND}"
        exit 0
        ;;
 
-    p) position=$(echo "$OPTARG" | sed -n "s/^\([0-9]*\)$/\1/p")
+    p) position="-p $(echo "$OPTARG" | sed -n "s/^\([0-9]*\)$/\1/p")" ;;
 
-       if [ -z "$position" ]
-       then
-         help "Invalid position specified: $position"
-       fi
+    f) full="-f" ;;
+    w) wide="-w" ;;
+    0) CONSOLE="/admin" ;;
+    a) ALLMENU=1 ;;
+    s) display="-d $OPTARG" ;;
 
-       SIZE=$(getGeometry "" $position)
-       ;;
-
-    h) help
-       ;;
-
-    \?) help "Unknown option"
-        ;;
+    h) help ;;
+    \?) help "Unknown option" ;;
   esac
 done
 
@@ -875,9 +704,10 @@ else
   fi
 fi
 
-if [ -z "$SIZE" ]
+SIZE=$(getGeometry $full $wide $display $position)
+if echo "$SIZE" | grep -iq error
 then
-  SIZE=$(getGeometry "" 0)
+  help "$SIZE"
 fi
 
 ACCESS="$(stat -c %a "${CONF_DIR}")"
@@ -942,9 +772,9 @@ do
 
     if [ $status -eq 0 ]
     then
-      echo -e "\e[32mOK\e[0m"
+      echo -e "${GREEN}OK${WHITE}"
     else
-      echo -e "\e[31mNOK [Status: $status]\e[0m"
+      echo -e "${RED}NOK [Status: $status]${WHITE}"
     fi
   ) &
 
