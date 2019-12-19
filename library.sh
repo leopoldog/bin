@@ -1,9 +1,9 @@
 #!/bin/bash
 
-RED="\e[01;31m"
-GREEN="\e[01;32m"
-YELLOW="\e[01;33m"
-WHITE="\e[0m"
+RED=$'\e[01;31m'
+GREEN=$'\e[01;32m'
+YELLOW=$'\e[01;33m'
+WHITE=$'\e[0m'
 
 # Check dependencies and defines environment variables with the same name as the specified command (in uppercase)
 # It's possible to define a variable name followed by a list of commands, the first found is used, ex.:

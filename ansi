@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. $(dirname "$0")/terminal.sh
+
 function printColors() {
   local size=$1
   local fgbg=$2
@@ -10,105 +12,154 @@ function printColors() {
   let end=$3+$4-1
   for color in $(seq $start $end)
   do
-    printf "${prefix}\e[${fgbg}%sm %-${size}s \e[0m" $color ${fgbg}$color
+    printf "${prefix}${CSI}${fgbg}%sm %-${size}s ${CSI}0m" $color ${fgbg}$color
   done
 }
 
+function cursorMovements() {
+  echo "${CSI}1mCursor movements:${CSI}0m"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  |  Sequence  | Description                                                       |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ${CSI}3mn${CSI}23m A    | Cursor Up ${CSI}3mn${CSI}23m cells                                                 |"
+  echo "  | CSI ${CSI}3mn${CSI}23m B    | Cursor Down ${CSI}3mn${CSI}23m cells                                               |"
+  echo "  | CSI ${CSI}3mn${CSI}23m C    | Cursor Forward ${CSI}3mn${CSI}23m cells                                            |"
+  echo "  | CSI ${CSI}3mn${CSI}23m D    | Cursor Back ${CSI}3mn${CSI}23m cells                                               |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ${CSI}3mn${CSI}23m E    | Cursor ${CSI}3mn${CSI}23m Lines down at start of line                              |"
+  echo "  | CSI ${CSI}3mn${CSI}23m F    | Cursor ${CSI}3mn${CSI}23m Lines up at start of line                                |"
+  echo "  | CSI ${CSI}3mn${CSI}23m G    | Cursor Horizontal Absolute                                        |"
+  echo "  | CSI ${CSI}3mn${CSI}23m;${CSI}3mm${CSI}23m H  | Cursor Position                                                   |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ${CSI}3mn${CSI}23m J    | Erase in Display                                                  |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=0: to the end of the screen                                   |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=1: to the beginning of the screen                             |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=2: clear the full screen                                      |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=3: clear the full screen and the scrollback buffer            |"
+  echo "  | CSI ${CSI}3mn${CSI}23m K    | Erase in Line                                                     |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=0: to the end of line                                         |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=1: to the beginning of line                                   |"
+  echo "  |            |   ${CSI}3mn${CSI}23m=2: clear the full line                                        |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ${CSI}3mn${CSI}23m S    | Scroll Up                                                         |"
+  echo "  | CSI ${CSI}3mn${CSI}23m T    | Scroll Down                                                       |"
+  echo "  | CSI ${CSI}3mn${CSI}23m;${CSI}3mm${CSI}23m f  | Horizontal Vertical Position (same as  CSI ${CSI}3mn${CSI}23m;${CSI}3mm${CSI}23m H)                 |"
+  echo "  | CSI ${CSI}3mn${CSI}23m m    | Select Graphic Rendition                                          |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI 4 i    | AUX Port Off (usually for printer)                                |"
+  echo "  | CSI 5 i    | AUX Port On (usually for printer)                                 |"
+  echo "  | CSI 6 n    | Device Status Report (answer with CSI ${CSI}3mn${CSI}23m;${CSI}3mm${CSI}23m R as typed on keyboard) |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI s      | Save Cursor Position                                              |"
+  echo "  | CSI u      | Restore Cursor Position                                           |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ?25h   | Shows the cursor                                                  |"
+  echo "  | CSI ?25l   | Hides the cursor                                                  |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ?1049h | Enable alternative screen buffer                                  |"
+  echo "  | CSI ?1049l | Disable alternative screen buffer                                 |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo "  | CSI ?2004h | Pasted text will be surronded by CSI 200~ and CSI 201~            |"
+  echo "  | CSI ?2004l | Pasted test will not be surrounded                                |"
+  echo "  +------------+-------------------------------------------------------------------+"
+  echo
+}
+
 function formatting() {
-  echo -e "\e[1mFormatting: \\\\e[\e[3mn\e[23mm\e[0m"
-  echo -e "  +------------------------------------------+--------------------------------+"
-  echo -e "  |                   Set                    |            Reset               |"
-  echo -e "  +------------------------------------------+--------------------------------+"
-  echo -e "  |                                          |  0 : \e[0mDefault (all flags reset)\e[0m |"
-  echo -e "  |  1 : \e[1mBold\e[22m          2 : \e[2mDim\e[22m               | 22 : \e[22mNot Bold or Dim\e[0m           |"
-  echo -e "  |  3 : \e[3mItalic\e[23m                              | 23 : \e[23mNot Italic\e[0m                |"
-  echo -e "  |  4 : \e[4mUnderlined\e[24m   21 : \e[21mDouble underlined\e[24m | 24 : \e[24mNot Underlined\e[0m            |"
-  echo -e "  |  5 : \e[5mBlink\e[25m         6 : \e[6mRapid blink\e[25m       | 25 : \e[25mNot Blink\e[0m                 |"
-  echo -e "  |  7 : \e[7mInverted\e[27m                            | 27 : \e[27mNot Inverted\e[0m              |"
-  echo -e "  |  8 : \e[8mHidden\e[28m                              | 28 : \e[28mNot Hidden\e[0m                |"
-  echo -e "  |  9 : \e[9mStrikeout\e[29m                           | 29 : \e[29mNot Strikeout\e[0m             |"
-  echo -e "  | 11 : \e[10mFont 1\e[0m  ...  19 : \e[19mFont 9\e[0m            | 10 : \e[10mFont 0 (Default)\e[0m          |"
-  echo -e "  | 20 : \e[20mFraktur Font\e[10m                        |                                |"
-  echo -e "  | 51 : \e[51mFramed\e[54m       52 : \e[52mEncircled\e[54m         | 54 : \e[54mNot Framed or Encircled\e[0m   |"
-  echo -e "  | 53 : \e[53mOverlined\e[55m                           | 55 : \e[55mNot Overlined\e[0m             |"
-  echo -e "  +------------------------------------------+--------------------------------+"
+  echo "${CSI}1mFormatting: CSI ${CSI}3mn${CSI}23m m${CSI}0m"
+  echo "  +------------------------------------------+--------------------------------+"
+  echo "  |                   Set                    |            Reset               |"
+  echo "  +------------------------------------------+--------------------------------+"
+  echo "  |                                          |  0 : ${CSI}0mDefault (all flags reset)${CSI}0m |"
+  echo "  |  1 : ${CSI}1mBold${CSI}22m          2 : ${CSI}2mDim${CSI}22m               | 22 : ${CSI}22mNot Bold or Dim${CSI}0m           |"
+  echo "  |  3 : ${CSI}3mItalic${CSI}23m                              | 23 : ${CSI}23mNot Italic${CSI}0m                |"
+  echo "  |  4 : ${CSI}4mUnderlined${CSI}24m   21 : ${CSI}21mDouble underlined${CSI}24m | 24 : ${CSI}24mNot Underlined${CSI}0m            |"
+  echo "  |  5 : ${CSI}5mBlink${CSI}25m         6 : ${CSI}6mRapid blink${CSI}25m       | 25 : ${CSI}25mNot Blink${CSI}0m                 |"
+  echo "  |  7 : ${CSI}7mInverted${CSI}27m                            | 27 : ${CSI}27mNot Inverted${CSI}0m              |"
+  echo "  |  8 : ${CSI}8mHidden${CSI}28m                              | 28 : ${CSI}28mNot Hidden${CSI}0m                |"
+  echo "  |  9 : ${CSI}9mStrikeout${CSI}29m                           | 29 : ${CSI}29mNot Strikeout${CSI}0m             |"
+  echo "  | 11 : ${CSI}10mFont 1${CSI}0m  ...  19 : ${CSI}19mFont 9${CSI}0m            | 10 : ${CSI}10mFont 0 (Default)${CSI}0m          |"
+  echo "  | 20 : ${CSI}20mFraktur Font${CSI}10m                        |                                |"
+  echo "  | 51 : ${CSI}51mFramed${CSI}54m       52 : ${CSI}52mEncircled${CSI}54m         | 54 : ${CSI}54mNot Framed or Encircled${CSI}0m   |"
+  echo "  | 53 : ${CSI}53mOverlined${CSI}55m                           | 55 : ${CSI}55mNot Overlined${CSI}0m             |"
+  echo "  +------------------------------------------+--------------------------------+"
   echo
 }
 
 function colorCube3b() {
   local step=2
   local prefix
-  echo -e "  \e[1mColor cube 3bits: \\\\e[\e[3mn\e[23mm\e[0m"
-  echo -e "    +---------+------------+------------+"
-  echo -e "    |         | Foreground | Background |"
-  echo -e "    |  \e[34;1mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0     1    \e[39m|\e[30m 0     1    \e[0m|"
-  echo -e "    +--v--v---+------------+------------+"
+  echo "  ${CSI}1mColor cube 3bits: CSI ${CSI}3mn${CSI}23m m${CSI}0m"
+  echo "    +---------+------------+------------+"
+  echo "    |         | Foreground | Background |"
+  echo "    |  ${CSI}34;1mB  ${CSI}32mG${CSI}0m  ${CSI}31;1mR${CSI}0m>${CSI}41;30m 0     1    ${CSI}39m|${CSI}30m 0     1    ${CSI}0m|"
+  echo "    +--v--v---+------------+------------+"
   for base in $(seq 30 $step 37)
   do
-    printf "    | \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printf "    | ${CSI}44;30m %d ${CSI}42;30m %d ${CSI}0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
     printColors 4 "" $base $step
     printf "|"
     printColors 4 "" $[ base+10 ] $step "$prefix"
     echo "|"
-    prefix="\e[30m"
+    prefix="${CSI}30m"
   done
-  echo -e "    +---------+------------+------------+"
-  echo -e "    | \e[1mDefault\e[0m |     39     |     49     |"
-  echo -e "    +---------+------------+------------+"
+  echo "    +---------+------------+------------+"
+  echo "    | ${CSI}1mDefault${CSI}0m |     39     |     49     |"
+  echo "    +---------+------------+------------+"
   echo
 }
 
 function colorCube3bBright() {
   local step=2
-  echo -e "  \e[1mColor cube 3bits Bright: \\\\e[\e[3mn\e[23mm\e[0m"
-  echo -e "    +---------+------------+------------+"
-  echo -e "    |         | Foreground | Background |"
-  echo -e "    |  \e[34;1mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0     1    \e[39m|\e[30m 0     1    \e[0m|"
-  echo -e "    +--v--v---+------------+------------+"
+  echo "  ${CSI}1mColor cube 3bits Bright: CSI ${CSI}3mn${CSI}23m m${CSI}0m"
+  echo "    +---------+------------+------------+"
+  echo "    |         | Foreground | Background |"
+  echo "    |  ${CSI}34;1mB  ${CSI}32mG${CSI}0m  ${CSI}31;1mR${CSI}0m>${CSI}41;30m 0     1    ${CSI}39m|${CSI}30m 0     1    ${CSI}0m|"
+  echo "    +--v--v---+------------+------------+"
   for base in $(seq 90 $step 97)
   do
-    printf "    | \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printf "    | ${CSI}44;30m %d ${CSI}42;30m %d ${CSI}0m  |" $[ (base/4)%2 ] $[ (base/2)%2 ]
     printColors 4 "" $base $step
     printf "|"
-    printColors 4 "" $[ base+10 ] $step "\e[30m"
+    printColors 4 "" $[ base+10 ] $step "${CSI}30m"
     echo "|"
   done
-  echo -e "    +---------+------------+------------+"
-  echo -e "    | \e[1mDefault\e[0m |     39     |     49     |"
-  echo -e "    +---------+------------+------------+"
+  echo "    +---------+------------+------------+"
+  echo "    | ${CSI}1mDefault${CSI}0m |     39     |     49     |"
+  echo "    +---------+------------+------------+"
   echo
 }
 
 function colorCube4b() {
   local step=2
   local prefix
-  echo -e "  \e[1mColor cube 4bits: \\\\e[\e[3mn\e[23mm\e[0m"
-  echo -e "    +------------+------------------+------------------+"
-  echo -e "    |            |    Foreground    |    Background    |"
-  echo -e "    |  \e[1mI  \e[34mB  \e[32mG\e[0m  \e[31;1mR\e[0m>\e[41;30m 0        1       \e[39m|\e[30m 0        1       \e[0m|"
-  echo -e "    +------------+------------------+------------------+"
+  echo "  ${CSI}1mColor cube 4bits: CSI ${CSI}3mn${CSI}23m m${CSI}0m"
+  echo "    +------------+------------------+------------------+"
+  echo "    |            |    Foreground    |    Background    |"
+  echo "    |  ${CSI}1mI  ${CSI}34mB  ${CSI}32mG${CSI}0m  ${CSI}31;1mR${CSI}0m>${CSI}41;30m 0        1       ${CSI}39m|${CSI}30m 0        1       ${CSI}0m|"
+  echo "    +------------+------------------+------------------+"
   for base in $(seq 0 $step 15)
   do
-    printf "    |  %d \e[44;30m %d \e[42;30m %d \e[0m  |" $[ (base/8)%2 ] $[ (base/4)%2 ] $[ (base/2)%2 ]
+    printf "    |  %d ${CSI}44;30m %d ${CSI}42;30m %d ${CSI}0m  |" $[ (base/8)%2 ] $[ (base/4)%2 ] $[ (base/2)%2 ]
     printColors 7 38:5: $base $step
     printf "|"
     printColors 7 48:5: $base $step "$prefix"
     echo "|"
-    prefix="\e[30m"
+    prefix="${CSI}30m"
   done
-  echo -e "    +------------+------------------+------------------+"
-  echo -e "    | \e[1mDefault\e[0m    |        39        |        49        |"
-  echo -e "    +------------+------------------+------------------+"
+  echo "    +------------+------------------+------------------+"
+  echo "    | ${CSI}1mDefault${CSI}0m    |        39        |        49        |"
+  echo "    +------------+------------------+------------------+"
   echo
 }
 
 function grayShades() {
   local step=4
   local prefix
-  echo -e "\e[1mGray shades: \\\\e[\e[3mn\e[23mm\e[0m (38:5:\e[1mG\e[0m or 48:5:\e[1mG\e[0m where \e[1mG\e[0m=232+Gray level from 0 to 23)\e[0m"
-  echo -e "  +----------------------------------------+----------------------------------------+"
-  echo -e "  |               Foreground               |               Background               |"
-  echo -e "  +----------------------------------------+----------------------------------------+"
+  echo "${CSI}1mGray shades: CSI ${CSI}3mn${CSI}23m m${CSI}0m (38:5:${CSI}1mG${CSI}0m or 48:5:${CSI}1mG${CSI}0m where ${CSI}1mG${CSI}0m=232+Gray level from 0 to 23)${CSI}0m"
+  echo "  +----------------------------------------+----------------------------------------+"
+  echo "  |               Foreground               |               Background               |"
+  echo "  +----------------------------------------+----------------------------------------+"
   for base in $(seq 232 $step 255)
   do
     printf "  |"
@@ -116,47 +167,47 @@ function grayShades() {
     printf "|"
     printColors 8 48:5: $base $step "$prefix"
     echo "|"
-    prefix="\e[30m"
+    prefix="${CSI}30m"
   done
-  echo -e "  +----------------------------------------+----------------------------------------+"
-  echo -e "  | \e[1mDefault\e[0m           39                   |                   49                   |"
-  echo -e "  +----------------------------------------+----------------------------------------+"
+  echo "  +----------------------------------------+----------------------------------------+"
+  echo "  | ${CSI}1mDefault${CSI}0m           39                   |                   49                   |"
+  echo "  +----------------------------------------+----------------------------------------+"
   echo
 }
 
 function colorCube8b() {
   local step=6
   local prefix
-  echo -e "  \e[1mColor cube 8bits: \\\\e[\e[3mn\e[23mm\e[0m (<\e[31;1mR\e[39m>*36+<\e[32;1mG\e[39m>*6+<\e[34;1mB\e[39m>+16)\e[0m"
-  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
-  echo -e "    |         |                         Foreground                         |                         Background                         |"
-  echo -e "    |  \e[31;1mR  \e[32mG  \e[34mB\e[0m>\e[44;30m 0         1         2         3         4         5        |  0         1         2         3         4         5       \e[0m|"
-  echo -e "    +--v--v---+------------------------------------------------------------+------------------------------------------------------------+"
+  echo "  ${CSI}1mColor cube 8bits: CSI ${CSI}3mn${CSI}23m m${CSI}0m (<${CSI}31;1mR${CSI}39m>*36+<${CSI}32;1mG${CSI}39m>*6+<${CSI}34;1mB${CSI}39m>+16)${CSI}0m"
+  echo "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo "    |         |                         Foreground                         |                         Background                         |"
+  echo "    |  ${CSI}31;1mR  ${CSI}32mG  ${CSI}34mB${CSI}0m>${CSI}44;30m 0         1         2         3         4         5        |  0         1         2         3         4         5       ${CSI}0m|"
+  echo "    +--v--v---+------------------------------------------------------------+------------------------------------------------------------+"
   for base in $(seq 16 $step 231)
   do
-    printf "    | \e[41;30m %d \e[42;30m %d \e[0m  |" $[ (base-16)/36 ] $[ ((base-16)/6)%6 ]
+    printf "    | ${CSI}41;30m %d ${CSI}42;30m %d ${CSI}0m  |" $[ (base-16)/36 ] $[ ((base-16)/6)%6 ]
     printColors 8 38:5: $base $step
     printf "|"
     printColors 8 48:5: $base $step "$prefix"
     echo "|"
-    prefix="\e[30m"
+    prefix="${CSI}30m"
   done
-  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
-  echo -e "    | \e[1mDefault\e[0m |                             39                             |                             49                             |"
-  echo -e "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
+  echo "    | ${CSI}1mDefault${CSI}0m |                             39                             |                             49                             |"
+  echo "    +---------+------------------------------------------------------------+------------------------------------------------------------+"
   echo
 }
 
 function colorCube24b() {
-  echo -e "  \e[1mColor cube 24bits: \\\\e[\e[3mn\e[23mm\e[0m (where \e[31;1mR\e[39m, \e[32;1mG\e[39m and \e[34;1mB\e[0m are intensities from 0 to 255)"
-  echo -e "    Foreground: \\\\e[38:2:\e[31;1mR\e[39m:\e[32;1mG\e[39m:\e[34;1mB\e[0mm    Background: \\\\e[48:2:\e[31;1mR\e[39m:\e[32;1mG\e[39m:\e[34;1mB\e[0mm"
+  echo "  ${CSI}1mColor cube 24bits: CSI ${CSI}3mn${CSI}23m m${CSI}0m (where ${CSI}31;1mR${CSI}39m, ${CSI}32;1mG${CSI}39m and ${CSI}34;1mB${CSI}0m are intensities from 0 to 255)"
+  echo "    Foreground: CSI 38:2:${CSI}31;1mR${CSI}39m:${CSI}32;1mG${CSI}39m:${CSI}34;1mB${CSI}0m m    Background: CSI 48:2:${CSI}31;1mR${CSI}39m:${CSI}32;1mG${CSI}39m:${CSI}34;1mB${CSI}0m m"
   echo
 }
 
 function help() {
   cat <<!
 
-Usage: $0 [OPTION]...
+Usage: $(basename "$0") [OPTION]...
 Show ANSI codes.
 
 Options :
@@ -176,6 +227,8 @@ Options :
                8  : 8 bits colors
                24 : 24 bits colors (the table is not shown because too big, just a hint is given)
 
+  -m         show cursor movements
+
 All the codes can be chained to have a combined effect.
 Pay attention to reset the flags when you don't need anymore otherwise, the flag will extends on the next text.
 
@@ -185,7 +238,7 @@ Pay attention to reset the flags when you don't need anymore otherwise, the flag
 
 [ -z "$1" ] && help
 
-while getopts "ac:fgh" opt
+while getopts "ac:fghm" opt
 do
   case $opt in
     f) FORMATTING=formatting ;;
@@ -197,6 +250,7 @@ do
          8) COLORCUBE8B=colorCube8b ;;
          24) COLORCUBE24B=colorCube24b ;;
        esac ;;
+    m) CURSORMOVEMENTS=cursorMovements ;;
     a) FORMATTING=formatting
        GRAYSHADES=grayShades
        COLORCUBE3B=colorCube3b
@@ -204,6 +258,7 @@ do
        COLORCUBE3BBRIGHT=colorCube3bBright
        COLORCUBE8B=colorCube8b
        COLORCUBE24B=colorCube24b
+       CURSORMOVEMENTS=cursorMovements
        ;;
     h) help ;;
     \?) help ;;
@@ -212,9 +267,10 @@ done
 
 $FORMATTING
 $GRAYSHADES
-[ ! -z "$COLORCUBE3B$COLORCUBE4B$COLORCUBE3BBRIGHT$COLORCUBE8B$COLORCUBE24B" ] && echo -e "\e[1mColor map: (IBGR=Intensity,Blue,Green,Red)\e[0m"
+[ ! -z "$COLORCUBE3B$COLORCUBE4B$COLORCUBE3BBRIGHT$COLORCUBE8B$COLORCUBE24B" ] && echo "${CSI}1mColor map: (IBGR=Intensity,Blue,Green,Red)${CSI}0m"
 $COLORCUBE3B
 $COLORCUBE3BBRIGHT
 $COLORCUBE4B
 $COLORCUBE8B
 $COLORCUBE24B
+$CURSORMOVEMENTS
