@@ -76,7 +76,7 @@ You must use IP addresses and not machines names to allow MAC scan work in all c
 "
 
   echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "rdp" --text "$MSG"
+  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "$PROGRAM_NAME" --text "$MSG"
 
   if [ ! -z "$1" ]
   then
@@ -405,7 +405,7 @@ function checkMac()
         MSG="Unable to find mac address for '$ALIAS', found $n correspondences.
 Please specify it manually!"
         echo -e "\n${RED}$MSG${WHITE}\n" >&2
-        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
+        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
         NEW_ADDR=$ADDRESS
       else
         (
@@ -424,7 +424,7 @@ Please specify it manually!"
   then
     MSG="'$ALIAS' not found"
     echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
     return 2
   else
     echo "Found $ALIAS => $ADDRESS" >&2
@@ -526,7 +526,7 @@ function startViewer()
   else
     MSG="Unable to open connection to machine '$ALIAS' because '$ADDRESS' is not responding."
     echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
     return 1
   fi
 
@@ -585,7 +585,7 @@ function startConnection()
 
   if [ "$AUTOPASS" == "true" ]
   then
-    OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/rdp.conf)"
+    OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/${PROGRAM_NAME}.conf)"
   elif [ -z "$PASSWORD" ]
   then
     if [ "$PROTOCOL" == "RDP" ]
@@ -730,7 +730,7 @@ if [ "${ACCESS:1}" -ne "00" ]
 then
   MSG="The access right on ${CONF_DIR} are too permissive."
   echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=rdp "$MSG"
+  [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
   exit 4
 fi
 
