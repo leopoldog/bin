@@ -2,12 +2,14 @@
 
 shopt -s globstar
 
+echo "Cleaning workspaces"
 locate -b ".launches" | grep "$HOME/" | tr "\n" "\0" | xargs -0 grep -arl "\/src\/test\/java" \
 | while read file
   do
     echo "Removing: $file"
     rm -f "$file"
   done
+echo "Done."
 
 export SWT_GTK3=0
 export GTK2_RC_FILES=~/.gtkrc-eclipse
