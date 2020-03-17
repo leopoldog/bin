@@ -98,11 +98,11 @@ function checkMacViaSSH()
   if [ -z "$PASS" ]
   then
     checkDependencies ssh
-    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-nics -l" \
+    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
     | grep -q "\<\(${MAC}\)\>"
   else
     checkDependencies sshpass ssh
-    $SSHPASS "$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-nics -l" \
+    $SSHPASS "$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
     | grep -q "\<\(${MAC}\)\>"
   fi
 }
@@ -115,7 +115,7 @@ function getGeometry()
   local panels
   local full=0
   local wide=0
-  locate optpos=$OPTIND
+  local optpos=$OPTIND
 
   checkDependencies xwininfo xrandr
 

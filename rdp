@@ -797,6 +797,7 @@ done
 
 # Remove old error files
 find "${CONF_DIR}" -name "${ERROR_FILE_PREFIX}*.log" -mtime +30 -exec rm -f {} \;
+touch "${ERROR_FILE}"
 ln -f "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
 
 wait
