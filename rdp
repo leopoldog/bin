@@ -479,6 +479,7 @@ function startViewer()
 {
   local nocache=$1
   local screensize="$2"
+  local title="$3"
 
   if [ -z "$screensize" ]
   then
@@ -499,11 +500,11 @@ function startViewer()
           CACHE=-P
         fi
         #$RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
-        $XFREERDP /t:${ALIAS} ${OUSERNAME/-u/\/u:} ${OPASSWORD/-p/\/p:} ${ODOMAIN/-d/\/d:} /size:${screensize} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${ADDRESS} -decorations +home-drive +clipboard /microphone:sys:pulse /sound:sys:pulse /multimedia:sys:pulse ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
+        $XFREERDP /t:"${TITLE}" ${OUSERNAME/-u/\/u:} ${OPASSWORD/-p/\/p:} ${ODOMAIN/-d/\/d:} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${ADDRESS} -decorations +home-drive +clipboard /microphone:sys:pulse /sound:sys:pulse /multimedia:sys:pulse ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       VNC)
-        $VNCVIEWER -name "${ALIAS}" -geometry ${screensize} ${ADDRESS} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
+        $VNCVIEWER -name "${TITLE}" -geometry ${screensize} ${ADDRESS} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       SSH)
@@ -516,10 +517,10 @@ function startViewer()
 
         if [ -z "$OPASSWORD" ]
         then
-          $TERMINAL --name "${ALIAS}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
+          $TERMINAL --name "${TITLE}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
         else
           $SSHPASS $OPASSWORD $SSHCOPYID -o StrictHostKeyChecking=no "$CN" 2>/dev/null
-          $TERMINAL --name "${ALIAS}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
+          $TERMINAL --name "${TITLE}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
         fi
         ;;
     esac
@@ -570,6 +571,7 @@ function startConnection()
   local LOCALNET="${10}"
   local NOCACHE="${11}"
   local SCREENSIZE="${12}"
+  local TITLE="${13}"
 
   if [ -z "$USERNAME" ]
   then
@@ -620,7 +622,7 @@ function startConnection()
   if [ ! -z "$ADDRESS" ]
   then
     [ "$NOCACHE" == "true" ]
-    startViewer $? "${SCREENSIZE}"
+    startViewer $? "${SCREENSIZE}" "${TITLE}"
   fi
 
   return 0
@@ -778,9 +780,10 @@ do
   LOCALNET="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" localnet 2>/dev/null)"
   NOCACHE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" nocache 2>/dev/null)"
   SCREENSIZE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" screensize 2>/dev/null)"
+  TITLE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" title 2>/dev/null)"
 
   (
-    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}" "${SCREENSIZE}"
+    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}" "${SCREENSIZE}" "${TITLE:=$ALIAS}"
 
     status=$?
 
