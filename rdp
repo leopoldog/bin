@@ -308,9 +308,11 @@ $OLD_LIST" \
     echo "for bcfile in ~/.bash_completion.d/*; do [ -f \"\$bcfile\" ] && . \"\$bcfile\"; done" > "${BASH_COMPLETION_FILE}"
   fi
 
-  mkdir -p "${BASH_COMPLETION_DIR}"
+  if [ ! -f "${BASH_COMPLETION_DIR}/${PROGRAM_NAME}" ]
+  then
+    mkdir -p "${BASH_COMPLETION_DIR}"
 
-  cat > "${BASH_COMPLETION_DIR}/${PROGRAM_NAME}" <<!
+    cat > "${BASH_COMPLETION_DIR}/${PROGRAM_NAME}" <<!
 _rdp_tab_complete () {
   local cur prev
   COMPREPLY=()
@@ -332,6 +334,7 @@ _rdp_tab_complete () {
 }
 complete -o filenames -F _rdp_tab_complete "$PROGRAM_NAME"
 !
+  fi
 }
 
 function checkMac()
