@@ -2,6 +2,7 @@
 
 find . -xdev -type d -name ".git" -or -name ".svn" \
 | sort -u \
+| grep -v "\.old\>" \
 | while read f
   do
     pushd "$(dirname "$f")" > /dev/null 2>&1
