@@ -24,7 +24,7 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64 etherwake sudo
 then
   exit -1
 fi
@@ -67,6 +67,8 @@ Options:
   -a <menu>       Open all machines specified in the given menu name
 
   -f              Full screen (ignore menu bars height)
+
+  -e              Use ${ETHERWAKE} to turn on the computer remotely if possible (Works only on the same LAN)
 
 The directory ${CONF_DIR} contains the definitions of machines in the form:
 LGHI REVISE THIS
@@ -710,8 +712,9 @@ unset full
 unset display
 unset wide
 unset position
+unset wakeOnLAN
 
-while getopts "h0wulfs:p:a" opt
+while getopts "h0wulfes:p:a" opt
 do
   case $opt in
     u) regenerate
@@ -729,6 +732,7 @@ do
     0) CONSOLE="/admin" ;;
     a) ALLMENU=1 ;;
     s) display="-d $OPTARG" ;;
+    e) wakeOnLAN=1 ;;
 
     h) help ;;
     \?) help "Unknown option" ;;
@@ -801,6 +805,43 @@ echo
 
 # remove old cache stale files (if present)
 \rm -f $(fuser -a -u ~/.rdesktop/cache/pstcache* 2>&1 | \grep -v "(${USER})$" | \sed "s/:$//g")
+
+if [ ! -z "$wakeOnLAN" ]
+then
+  wolSleep=$(echo "$LIST" \
+             | while read MENU ALIAS
+             do
+               ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
+               MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
+
+                 if [ -z "$MAC" ]
+                 then
+                   echo "${YELLOW}MAC address unknown for remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
+                 else
+                   ping -c 5 "$ADDRESS" > /dev/null 2>&1
+                   if [ $? -eq 1 ]
+                   then
+                     echo "Waking up machine \"$ALIAS\"" >&2
+                     for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                     do
+                       for mac in ${MAC//\\|/ }
+                       do
+                         ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
+                       done
+                     done
+                     echo 1
+                   else
+                     echo "\"$ALIAS\" already on" >&2
+                 fi
+               fi
+             done)
+
+  if [ ! -z "$wolSleep" ]
+  then
+    echo "Waiting 15s to be sure that waked up machines are turned on"
+    sleep 15
+  fi
+fi
 
 echo "$LIST" \
 | while read MENU ALIAS
