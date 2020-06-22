@@ -24,7 +24,7 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64 etherwake sudo
+if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64 etherwake sudo host
 then
   exit -1
 fi
@@ -345,39 +345,19 @@ function checkMac()
   local LOCALNET=$2
 
   local MACSMB="${MAC//:/-}"
-  local STATUS="$(${NMBLOOKUP} -R -S -A $ADDRESS)"
 
-  found=1
+  found=0
 
-  echo "$STATUS" | grep -iq "MAC Address = \(${MACSMB}\)"
-  if [ $? -eq 1 ]
+  if ${NMAP} -Pn -n -p 3389 --open ${IP_ADDRESS} | grep -q "^3389/tcp *open"
   then
-    if [ "$PROTOCOL" != "RDP" ]
-    then
-      if [ -z "${OUSERNAME}" ]
-      then
-        CN=${ADDRESS}
-      else
-        CN=${USERNAME}@${ADDRESS}
-      fi
-
-      local GETMAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}" "${OPASSWORD}")
-
-      echo "$GETMAC" | grep -q "\($MAC\)"
-
-      if [ "$?" -ne 0 ]
-      then
-        found=0
-      fi
-    else
-      found=0
-    fi
+    ${NMBLOOKUP} -R -S -A $ADDRESS | grep -iq "MAC Address = \(${MACSMB}\)" && found=1
+  elif ${NMAP} -Pn -n -p 22 --open ${IP_ADDRESS} | grep -q "^22/tcp *open"
+  then
+    getMacViaSSH "${USERNAME}" "${IP_ADDRESS}" "${PASSWORD}" | grep -iq "\($MAC\)" && found=1
   fi
 
   if [ $found -eq 0 ]
   then
-    IP_ADDRESS="$(echo "$STATUS" | sed -n "s/Looking up status of //p" | head -1)"
-
     if [ "$LOCALNET" -eq 0 ]
     then
       SCAN=( $($IP addr | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" | grep -v "127\.0\.0\.1" | sort -u) )
@@ -385,52 +365,39 @@ function checkMac()
       SCAN=( $(echo $IP_ADDRESS | sed "s/\.[^.]*$/.*/g") )
     fi
 
-    NMAPLIST=$($NMAP -n -sP "${SCAN[@]}" | sed -n "s/Nmap scan report for \([0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\)/\1/p")
     NEW_ADDR=$($ARP -n | grep -i "${MAC}" | sed -n "s/^\([^ ]*\) .*/\1/p")
 
     if [ -z "$NEW_ADDR" ]
     then
-      if [ "$PROTOCOL" == "RDP" ]
-      then
-        NEW_ADDR=$($NMAP -n -p 3389 --open "${SCAN[@]}" \
-                   | tr "\n" " " \
-                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
-                   | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
-                   | while read ip_addr opened
+      NMAP_LIST=$(${NMAP} -Pn -n -p 5900,3389,23,22 --open "${SCAN[@]}" \
+                  | grep -wv "filtered\|Not shown" \
+                  | tr "\n" " " \
+                  | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
+                  | sed -n "s/^\([0-9.]\+\).*SERVICE[[:space:]]\([0-9]\+\)\/tcp[[:space:]]open.*/\1 \2/p")
+      NEW_ADDR=$( (echo "$NMAP_LIST" \
+                   | sed -n "s/^\([0-9.]\+\) 3389\>/\1/p" \
+                   | while read addr
                      do
-                       if [ "$opened" == "open" ] && ${NMBLOOKUP} -R -S -A $ip_addr | grep -iq "MAC Address = \(${MACSMB}\)"
-                       then
-                         echo $ip_addr
-                         break
-                       fi
-                     done)
-      else
-        NEW_ADDR=$($NMAP -n -p 22 --open "${SCAN[@]}" \
-                   | tr "\n" " " \
-                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
-                   | sed -n "s/^\([0-9.]\+\).*\(open\|closed\|filtered\).*/\1 \2/p" \
-                   | while read ip_addr opened
-                     do
-                       if [ "$opened" == "open" ]
-                       then
-                         if [ -z "${OUSERNAME}" ]
-                         then
-                           CN=${ip_addr}
-                         else
-                           CN=${USERNAME}@${ip_addr}
-                         fi
+                       (nmblookup -R -S -A "$addr" \
+                        | tr "\n" " "
+                        echo)&
+                     done
+                   wait) \
+                 | grep "MAC Address = \(${MACSMB^^}\)" \
+                 | sed -n "s/^Looking up status of \([0-9.]\+\).*/\1/p")
 
-                         if checkMacViaSSH "${CN}" "${MAC}" "${OPASSWORD}"
-                         then
-                           echo $ip_addr
-                           break
-                         fi
-                       elif [ "$PROTOCOL" != "SSH" ] && ${NMBLOOKUP} -R -S -A $ip_addr | grep -iq "MAC Address = \(${MACSMB}\)"
-                       then
-                         echo $ip_addr
-                         break
-                       fi
-                     done)
+      if [ -z "$NEW_ADDR" ]
+      then
+        NEW_ADDR=$(echo "$NMAP_LIST" \
+                   | sed -n "s/^\([0-9.]\+\) 22\>/\1/p" \
+                   | while read ip_addr
+                     do
+                       (if checkMacViaSSH "${USERNAME}" "${ip_addr}" "${MAC}" "${PASSWORD}"
+                        then
+                          echo $ip_addr
+                        fi) &
+                     done
+                   wait)
       fi
     fi
 
@@ -448,7 +415,7 @@ Please specify it manually!"
         (
           $FLOCK $fd
           echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
-          $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$NEW_ADDR"
+          $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address $NEW_ADDR
           $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$MAC"
         ) {fd}<"${LOCK_FILE}"
       fi
@@ -483,14 +450,7 @@ function getMac()
 
     if [ -z "$MAC" ]
     then
-      if [ -z "${OUSERNAME}" ]
-      then
-        CN=${ADDRESS}
-      else
-        CN=${USERNAME}@${ADDRESS}
-      fi
-
-      MAC=$(getMacViaSSH "${CN}" "${IP_ADDRESS}" "${OPASSWORD}")
+      MAC=$(getMacViaSSH "${USERNAME}" "${IP_ADDRESS}" "${PASSWORD}")
     fi
   fi
 
@@ -517,6 +477,9 @@ function startViewer()
   local nocache=$1
   local screensize="$2"
   local title="$3"
+  local ODOMAIN
+  local CN
+  local CACHE
 
   if [ -z "$screensize" ]
   then
@@ -536,8 +499,15 @@ function startViewer()
         else
           CACHE=-P
         fi
-        #$RDESKTOP -T${ALIAS} ${OUSERNAME} ${OPASSWORD} ${ODOMAIN} -g${screensize} -a16 -rsound -kfr-ch ${ADDRESS} -D -z $CACHE -N -xl -r "disk:${USER}=${HOME}" -r "clipboard:PRIMARYCLIPBOARD" ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
-        $XFREERDP /t:"${TITLE}" ${OUSERNAME/-u/\/u:} ${OPASSWORD/-p/\/p:} ${ODOMAIN/-d/\/d:} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${ADDRESS} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
+
+        if [ -z "$DOMAIN" ]
+        then
+          ODOMAIN=""
+        else
+          ODOMAIN="/d:$DOMAIN"
+        fi
+
+        $XFREERDP /t:"${TITLE}" /u:"${USERNAME}" /p:"${PASSWORD}" ${ODOMAIN} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${ADDRESS} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1 | sed "s/^.*/${PROTOCOL} ${ALIAS}: &/" >> "${ERROR_FILE}" &
         ;;
 
       VNC)
@@ -545,19 +515,19 @@ function startViewer()
         ;;
 
       SSH)
-        if [ -z "${OUSERNAME}" ]
+        if [ -z "${USERNAME}" ]
         then
           CN=${ADDRESS}
         else
           CN=${USERNAME}@${ADDRESS}
         fi
 
-        if [ -z "$OPASSWORD" ]
+        if [ -z "$PASSWORD" ]
         then
           $TERMINAL --name "${TITLE}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$CN\"" &
         else
-          $SSHPASS $OPASSWORD $SSHCOPYID -o StrictHostKeyChecking=no "$CN" 2>/dev/null
-          $TERMINAL --name "${TITLE}" --tab --command "$SSHPASS $OPASSWORD $SSH -o StrictHostKeyChecking=no \"$CN\"" &
+          $SSHPASS -p"$PASSWORD" $SSHCOPYID -o StrictHostKeyChecking=no "$CN" 2>/dev/null
+          $TERMINAL --name "${TITLE}" --tab --command "$SSHPASS -p"$PASSWORD" $SSH -o StrictHostKeyChecking=no \"$CN\"" &
         fi
         ;;
     esac
@@ -598,55 +568,25 @@ function startConnection()
 {
   local MENU="$1"
   local ALIAS="$2"
-  local PROTOCOL="$3"
-  local USERNAME="$4"
-  local PASSWORD="$5"
-  local DOMAIN="$6"
-  local ADDRESS="$7"
-  local MAC="$8"
-  local AUTOPASS="$9"
-  local LOCALNET="${10}"
-  local NOCACHE="${11}"
-  local SCREENSIZE="${12}"
-  local TITLE="${13}"
+  local USERNAME="$3"
+  local PASSWORD="$4"
+  local DOMAIN="$5"
+  local ADDRESS="$6"
+  local MAC="$7"
+  local AUTOPASS="$8"
+  local LOCALNET="$9"
+  local NOCACHE="${10}"
+  local SCREENSIZE="${11}"
+  local TITLE="${12}"
 
-  if [ -z "$USERNAME" ]
+  if [ -z "$PASSWORD" -a "$AUTOPASS" == "true" ]
   then
-    if [ "$PROTOCOL" == "RDP" ]
-    then
-      OUSERNAME="-u$($ZENITY --entry --title "$ALIAS" --text "Username")"
-    else
-      OUSERNAME=""
-    fi
-  else
-    OUSERNAME="-u$USERNAME"
+    PASSWORD="$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/${PROGRAM_NAME}.conf)"
   fi
 
-  if [ "$AUTOPASS" == "true" ]
-  then
-    OPASSWORD="-p$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/${PROGRAM_NAME}.conf)"
-  elif [ -z "$PASSWORD" ]
-  then
-    if [ "$PROTOCOL" == "RDP" ]
-    then
-      OPASSWORD="-p$($ZENITY --entry --hide-text --title "$ALIAS" --text "Password for user ${OUSERNAME:2}")"
-    else
-      OPASSWORD=""
-    fi
-  else
-    OPASSWORD="-p$PASSWORD"
-  fi
-
-  if [ -z "$DOMAIN" ]
-  then
-    ODOMAIN=""
-  else
-    ODOMAIN="-d$DOMAIN"
-  fi
-
-  IP_ADDRESS=$(ping -q -c 1 "$ADDRESS" \
-               | head -1 \
-               | sed "s/[^(]*(\([0-9.]\+\)).*/\1/g")
+  IP_ADDRESS=$($HOST "$ADDRESS" \
+               | sed -n "s/.*has address \([0-9.]\+\)/\1/p;s/.*\b\([0-9]\+\)\.\([0-9]\+\)\.\([0-9]\+\)\.\([0-9]\+\)\.in-addr.arpa.*/\4.\3.\2.\1/p" \
+               | head -n 1)
 
   if [ ! -z "$MAC" ]
   then
@@ -655,6 +595,35 @@ function startConnection()
   else
     MAC=$(getMac)
   fi
+
+  if ${NMAP} -Pn -n -p 3389 --open ${IP_ADDRESS} | grep -q "^3389/tcp *open"
+  then
+    PROTOCOL=RDP
+
+    if [ -z "$USERNAME" ]
+    then
+      USERNAME="$($ZENITY --entry --title "$ALIAS" --text "Username")"
+    fi
+
+    if [ -z "$PASSWORD" ]
+    then
+      PASSWORD="$($ZENITY --entry --hide-text --title "$ALIAS" --text "Password for user ${USERNAME}")"
+    fi
+  elif ${NMAP} -Pn -n -p 5900 --open ${IP_ADDRESS} | grep -q "^5900/tcp *open"
+  then
+    PROTOCOL=VNC
+  else
+    PROTOCOL=SSH
+  fi
+
+  (
+    $FLOCK $fd
+    if [ "$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)" != "$PROTOCOL" ]
+    then
+      echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
+      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol $PROTOCOL
+    fi
+  ) {fd}<"${LOCK_FILE}"
 
   if [ ! -z "$ADDRESS" ]
   then
@@ -846,7 +815,6 @@ fi
 echo "$LIST" \
 | while read MENU ALIAS
 do
-  PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
   USERNAME="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" username 2>/dev/null)"
   PASSWORD="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" password 2>/dev/null)"
   DOMAIN="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" domain 2>/dev/null)"
@@ -859,7 +827,7 @@ do
   TITLE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" title 2>/dev/null)"
 
   (
-    startConnection "${MENU}" "${ALIAS}" "${PROTOCOL}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}" "${SCREENSIZE}" "${TITLE:=$ALIAS}"
+    startConnection "${MENU}" "${ALIAS}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${LOCALNET}" "${NOCACHE}" "${SCREENSIZE}" "${TITLE:=$ALIAS}"
 
     status=$?
 

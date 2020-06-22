@@ -57,18 +57,26 @@ function checkDependencies() {
 
 function getMacViaSSH()
 {
-  local CN="$1"
+  local USERNAME="$1"
   local IP_ADDRESS="$2"
   local PASS="$3"
   local BUFFER
+  local CN
+
+  if [ -z "$USERNAME" ]
+  then
+    CN=${IP_ADDRESS}
+  else
+    CN=${USERNAME}@${IP_ADDRESS}
+  fi
 
   if [ -z "$PASS" ]
   then
-    checkDependencies ssh
+    [ -z "$SSH" ] && checkDependencies ssh
     BUFFER="$($SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
   else
-    checkDependencies ssh sshpass
-    BUFFER="$($SSHPASS "$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
+    [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
+    BUFFER="$($SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
   fi
 
   if echo "$BUFFER" | grep -q "not found"
@@ -91,18 +99,27 @@ function getMacViaSSH()
 
 function checkMacViaSSH()
 {
-  local CN="$1"
-  local MAC="$2"
-  local PASS="$3"
+  local USERNAME="$1"
+  local IP_ADDRESS="$2"
+  local MAC="$3"
+  local PASS="$4"
+  local CN
+
+  if [ -z "$USERNAME" ]
+  then
+    CN=${IP_ADDRESS}
+  else
+    CN=${USERNAME}@${IP_ADDRESS}
+  fi
 
   if [ -z "$PASS" ]
   then
-    checkDependencies ssh
+    [ -z "$SSH" ] && checkDependencies ssh
     $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
     | grep -q "\<\(${MAC}\)\>"
   else
-    checkDependencies sshpass ssh
-    $SSHPASS "$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
+    [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
+    $SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
     | grep -q "\<\(${MAC}\)\>"
   fi
 }
