@@ -79,29 +79,19 @@ function getMacViaSSH()
     BUFFER="$($SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
   fi
 
-  if echo "$BUFFER" | grep -q "not found"
-  then
-    echo "$BUFFER" \
-    | tr "\n" " " \
-    | sed "s/VmKernel Nic/\nVmKernel Nic/g;s/\<\(${IP_ADDRESS}\)\>/\1\n/g" \
-    | grep "\<${IP_ADDRESS}\>" \
-    | sed "s/.*Mac Address\.*\([0-9a-f:]*\)[[:space:]].*/\1/g" \
-    | sort -u \
-    | head -n 1
-  else
-    echo "$BUFFER" \
-    | sed "s/^\([^[:space:]]\)/+++\1/g" \
-    | tr "\n" " " \
-    | sed "s/+++/\n/g" \
-    | sed -n "s;.*link/ether *\([^[:space:]]\+\) .*${IP_ADDRESS}.*;\1;p"
-  fi
+  echo $(echo "$BUFFER" \
+         | sed -n "s;.*\(link/ether[[:space:]]\+\|Mac Address\.*\)\([-:[:xdigit:]]\+\)[[:space:]].*;\2;p"  \
+         | sort -u \
+         | grep -vw "00.00.00.00.00.00" \
+         | tr "\n" " ")  \
+  | tr " " ","
 }
 
 function checkMacViaSSH()
 {
   local USERNAME="$1"
   local IP_ADDRESS="$2"
-  local MAC="$3"
+  local MAC="${3//,/\\|}"
   local PASS="$4"
   local CN
 
@@ -112,16 +102,16 @@ function checkMacViaSSH()
     CN=${USERNAME}@${IP_ADDRESS}
   fi
 
-  if [ -z "$PASS" ]
-  then
-    [ -z "$SSH" ] && checkDependencies ssh
-    $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
-    | grep -q "\<\(${MAC}\)\>"
-  else
-    [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
-    $SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l" \
-    | grep -q "\<\(${MAC}\)\>"
-  fi
+  (
+    if [ -z "$PASS" ]
+    then
+      [ -z "$SSH" ] && checkDependencies ssh
+      $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
+    else
+      [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
+      $SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
+    fi
+  ) | grep -q "\<\(${MAC}\)\>"
 }
 
 function getGeometry()

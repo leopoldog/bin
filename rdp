@@ -34,14 +34,16 @@ fi
 
 function help()
 {
+  local msg
+
   if [ ! -z "$1" ]
   then
-    MSG="
+    msg="
 $PROGRAM_NAME: $1
 "
   fi
 
-  MSG="$MSG
+  msg="$msg
 Usage:
   $PROGRAM_NAME [ -h0wluf ] [ -s <screen> ] [ -p <position> ] <alias> [ <username> ]
   $PROGRAM_NAME [ -h0wluf ] [ -s <screen> ] [ -p <position> ] -a <menu>
@@ -70,17 +72,25 @@ Options:
 
   -e              Use ${ETHERWAKE} to turn on the computer remotely if possible (Works only on the same LAN)
 
-The directory ${CONF_DIR} contains the definitions of machines in the form:
-LGHI REVISE THIS
-<menu> <alias> <type> <username> <password or - > <domain or - > <hostname or IP address> <MAC address>
+The files ${CONF_DIR}/<menu>.conf contains the definitions of machines in the form:
+[alias]
+username=<username>
+password=<password>       (optional but should be defined if the machine need a password to connect)
+domain=<domain>           (optional)
+address=<address>         (optional only if the mac is defined, otherwise mandatory)
+mac=<mac1>,<mac2>,<mac3>  (optional: it will be autofilled by the application)
+wide=true|false
+autopass=true|false       (optional, defaults to false. If true, the password field is not needed)
 
-type is RDP, VNC or SSH depending on protocol to use (in this case username, password and domain must be set to "-".
-Specify the MAC address allow searching the machine on local network even if the address has changed.
-You must use IP addresses and not machines names to allow MAC scan work in all cases.
+All fields are optional but under some conditions.
+
+Ex.: for SSH connections, the username can be the current user or defined in the ssh config file,
+     in this case it's not needed.
+     For RDP connections, if the user is unknown the program will ask for one at the connection.
 "
 
-  echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "$PROGRAM_NAME" --text "$MSG"
+  echo "$msg" >&2
+  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "$PROGRAM_NAME" --text "$msg"
 
   if [ ! -z "$1" ]
   then
@@ -341,38 +351,57 @@ complete -o filenames -F _rdp_tab_complete "$PROGRAM_NAME"
 
 function checkMac()
 {
-  local mac="$(echo "${1,,}" | sed "s/ //g;s/,/\\\\|/g")"
-  local address="$2"
+  local menu="$1"
+  local alias="$2"
+  local mac="$(echo "${3,,}" | sed "s/ //g;s/,/\\\\|/g")"
+  local address="$4"
+  local username="$5"
+  local password="$6"
 
+  local found=0
   local macsmb="${mac//:/-}"
-
-  found=0
+  local msg
+  local localscan
+  local remotescan
+  local new_addr
+  local nmap_list
 
   if ${NMAP} -Pn -n -p 3389 --open ${address} | grep -q "^3389/tcp *open"
   then
     ${NMBLOOKUP} -R -S -A $address | grep -iq "MAC Address = \(${macsmb}\)" && found=1
   elif ${NMAP} -Pn -n -p 22 --open ${address} | grep -q "^22/tcp *open"
   then
-    getMacViaSSH "${USERNAME}" "${address}" "${PASSWORD}" | grep -iq "\($mac\)" && found=1
+    getMacViaSSH "${username}" "${address}" "${password}" | grep -iq "\($mac\)" && found=1
   fi
 
   if [ $found -eq 0 ]
   then
-    LOCALSCAN=( $(echo "$($IP addr | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" | grep -v "^127")" | tr " " "\n" | sort -u | while read n; do $IPCALC $n | grep "^Network" | sed "s/.*: \+\([0-9./]\+\) \+.*/\1/g"; done | sort -u) )
+    localscan=( $(echo "$($IP addr \
+                          | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" \
+                          | grep -v "^127")" \
+                  | tr " " "\n" \
+                  | sort -u \
+                  | while read n
+                    do
+                      $IPCALC $n \
+                      | grep "^Network" \
+                      | sed "s/.*: \+\([0-9./]\+\) \+.*/\1/g"
+                    done \
+                  | sort -u) )
 
-    ${NMAP} -sP "${LOCALSCAN[@]}" > /dev/null 2>&1
+    ${NMAP} -sP "${localscan[@]}" > /dev/null 2>&1
 
-    NEW_ADDR=$($ARP -n | sed -n "s/^\([^ ]*\) \+ether \+\(${mac}\) \+.*/\1/p" | sort -u)
+    new_addr=$($ARP -n | sed -n "s/^\([^ ]*\) \+ether \+\(${mac}\) \+.*/\1/p" | sort -u)
 
-    if [ -z "$NEW_ADDR" ]
+    if [ -z "$new_addr" ]
     then
-      REMOTESCAN=( $(echo "${LOCALSCAN[@]}" "192.168.208.0/24" "10.122.16.0/23" | tr " " "\n" | sort | uniq -u) )
-      NMAP_LIST=$(${NMAP} -Pn -n -p 5900,3389,23,22 --open "${REMOTESCAN[@]}" \
+      remotescan=( $(echo "${localscan[@]}" "192.168.208.0/24" "10.122.16.0/23" | tr " " "\n" | sort | uniq -u) )
+      nmap_list=$(${NMAP} -Pn -n -p 5900,3389,23,22 --open "${remotescan[@]}" \
                   | grep -wv "filtered\|Not shown" \
                   | tr "\n" " " \
                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
                   | sed -n "s/^\([0-9.]\+\).*SERVICE[[:space:]]\([0-9]\+\)\/tcp[[:space:]]open.*/\1 \2/p")
-      NEW_ADDR=$( (echo "$NMAP_LIST" \
+      new_addr=$( (echo "$nmap_list" \
                    | sed -n "s/^\([0-9.]\+\) 3389\>/\1/p" \
                    | while read addr
                      do
@@ -384,13 +413,13 @@ function checkMac()
                  | grep "MAC Address = \(${macsmb^^}\)" \
                  | sed -n "s/^Looking up status of \([0-9.]\+\).*/\1/p")
 
-      if [ -z "$NEW_ADDR" ]
+      if [ -z "$new_addr" ]
       then
-        NEW_ADDR=$(echo "$NMAP_LIST" \
+        new_addr=$(echo "$nmap_list" \
                    | sed -n "s/^\([0-9.]\+\) 22\>/\1/p" \
                    | while read ip_addr
                      do
-                       (if checkMacViaSSH "${USERNAME}" "${ip_addr}" "${mac}" "${PASSWORD}"
+                       (if checkMacViaSSH "${username}" "${ip_addr}" "${mac}" "${password}"
                         then
                           echo $ip_addr
                         fi) &
@@ -399,46 +428,47 @@ function checkMac()
       fi
     fi
 
-    if [ ! -z "$NEW_ADDR" -a "$address" != "$NEW_ADDR" ]
+    if [ ! -z "$new_addr" -a "$address" != "$new_addr" ]
     then
-      n=$(echo "$NEW_ADDR" | wc -l)
+      n=$(echo "$new_addr" | wc -l)
       if [ $n -gt 1 ]
       then
-        MSG="Unable to find mac address for '$ALIAS', found $n correspondences.
-Please specify it manually!"
-        echo -e "\n${RED}$MSG${WHITE}\n" >&2
-        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
-        NEW_ADDR=$address
+        msg="Unable to find mac address for '$alias', found $n correspondences."$'\n'"Please specify it manually!"
+        echo -e "\n${RED}$msg${WHITE}\n" >&2
+        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
+        new_addr=$address
       else
         (
           $FLOCK $fd
-          echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
-          $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address $NEW_ADDR
-          $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$mac"
+          echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$new_addr, mac=${mac//\\|/,}" >&2
+          $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address $new_addr
+          $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "${mac//\\|/,}"
         ) {fd}<"${LOCK_FILE}"
       fi
     fi
 
-    address=$NEW_ADDR
+    address=$new_addr
   fi
 
   if [ -z "$address" ]
   then
-    MSG="'$ALIAS' not found"
-    echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
-    return 2
-  else
-    echo "Found $ALIAS => $address" >&2
-    echo "$mac $address"
+    msg="'$alias' not found"
+    echo "$msg" >&2
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
+    return 1
   fi
 
+  echo $address
   return 0
 }
 
 function getMac()
 {
-  local address="$1"
+  local menu="$1"
+  local alias="$2"
+  local address="$3"
+  local username="$4"
+  local password="$5"
   local mac=$(${NMBLOOKUP} -R -S -A $address \
               | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
               | tr "[:upper:]-" "[:lower:]:")
@@ -450,74 +480,90 @@ function getMac()
 
     if [ -z "$mac" ]
     then
-      mac=$(getMacViaSSH "${USERNAME}" "${address}" "${PASSWORD}")
+      mac=$(getMacViaSSH "${username}" "${address}" "${password}")
     fi
   fi
 
   if [ -z "$mac" ]
   then
     echo "Unable to find MAC address" >&2
-  else
-    echo "Found MAC address '${mac}'" >&2
-    (
-      $FLOCK $fd
-      echo "Update configuration file ${CONF_DIR}/${MENU}.conf" >&2
-      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" address "$address"
-      $CRUDINI --set "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac "$mac"
-    ) {fd}<"${LOCK_FILE}"
+    return 1
   fi
 
-  echo "$mac $address"
+  (
+    $FLOCK $fd
+    echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$address, mac=$mac" >&2
+    $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address "$address"
+    $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "$mac"
+  ) {fd}<"${LOCK_FILE}"
 
+  echo $address
   return 0
 }
 
 function startViewer()
 {
-  local nocache=$1
-  local screensize="$2"
-  local title="$3"
-  local alias="$4"
-  local address="$5"
-  local protocol="$6"
-  local username="$7"
-  local password="$8"
+  local alias="$1"
+  local address="$2"
+  local protocol="$3"
+  local username="$4"
+  local password="$5"
 
+  local domain
   local odomain
   local cn
+  local nocache
   local cache
-
-  if [ -z "$screensize" ]
-  then
-    screensize="${SIZE}"
-  fi
+  local screensize
+  local title
+  local msg
 
   ping -q -c 1 "$address" > /dev/null
 
   if [ $? -eq 0 -a ! -z "$address" ]
   then
+    title="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" title 2>/dev/null)"
+    screensize="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" screensize 2>/dev/null)"
+
+    if [ -z "$screensize" ]
+    then
+      screensize="${SIZE}"
+    fi
+
+    (
+      $FLOCK $fd
+      if [ "$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" protocol 2>/dev/null)" != "$protocol" ]
+      then
+        echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: protocol=$protocol" >&2
+        $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" protocol $protocol
+      fi
+    ) {fd}<"${LOCK_FILE}"
+
     echo "${protocol} ${alias}: $(date +"%Y-%m-%d %H:%M:%S") New session started" >> ${ERROR_FILE}
     case ${protocol} in
       RDP)
-        if [ $nocache -eq 0 ]
+        nocache="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" nocache 2>/dev/null)"
+        if [ ${nocache:=0} -eq 0 ]
         then
           cache=
         else
           cache=-P
         fi
 
-        if [ -z "$DOMAIN" ]
+        domain="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" domain 2>/dev/null)"
+
+        if [ -z "$domain" ]
         then
           odomain=""
         else
-          odomain="/d:$DOMAIN"
+          odomain="/d:$domain"
         fi
 
-        $XFREERDP /t:"${TITLE}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
+        $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
         ;;
 
       VNC)
-        $VNCVIEWER -name "${TITLE}" -geometry ${screensize} ${address} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
+        $VNCVIEWER -name "${title:=$alias}" -geometry ${screensize} ${address} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
         ;;
 
       SSH)
@@ -530,17 +576,17 @@ function startViewer()
 
         if [ -z "$password" ]
         then
-          $TERMINAL --name "${TITLE}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" &
+          $TERMINAL --name "${title:=$alias}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" &
         else
           $SSHPASS -p"$password" $SSHCOPYID -o StrictHostKeyChecking=no "$cn" 2>/dev/null
-          $TERMINAL --name "${TITLE}" --tab --command "$SSHPASS -p"$password" $SSH -o StrictHostKeyChecking=no \"$cn\"" &
+          $TERMINAL --name "${title:=$alias}" --tab --command "$SSHPASS -p"$password" $SSH -o StrictHostKeyChecking=no \"$cn\"" &
         fi
         ;;
     esac
   else
-    MSG="Unable to open connection to machine '$alias' because '$address' is not responding."
-    echo "$MSG" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
+    msg="Unable to open connection to machine '$alias' because '$address' is not responding."
+    echo "$msg" >&2
+    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
     return 1
   fi
 
@@ -549,9 +595,9 @@ function startViewer()
 
 function list()
 {
-  local MENU="$1"
+  local menu="$1"
 
-  if [ -z "$MENU" ]
+  if [ -z "$menu" ]
   then
     echo "Available displays:"
     $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
@@ -559,13 +605,13 @@ function list()
     echo "Available environments:"
     ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
   else
-    CONF="${CONF_DIR}/${MENU}.conf"
+    CONF="${CONF_DIR}/${menu}.conf"
     if [ -f "${CONF}" ]
     then
-      echo "Available machines for \"$MENU\" environment:"
+      echo "Available machines for \"$menu\" environment:"
       $CRUDINI --get "${CONF}"
     else
-      echo "Environment \"$MENU\" not found!"
+      echo "Environment \"$menu\" not found!"
     fi
   fi
 }
@@ -574,18 +620,16 @@ function startConnection()
 {
   local menu="$1"
   local alias="$2"
-  local username="$3"
-  local password="$4"
-  local domain="$5"
-  local address="$6"
-  local mac="$7"
-  local autopass="$8"
-  local nocache="$9"
-  local screensize="${10}"
-  local title="${11}"
+
+  local username="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" username 2>/dev/null)"
+  local password="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" password 2>/dev/null)"
+  local address="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" address 2>/dev/null)"
+  local mac="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" mac 2>/dev/null)"
+  local autopass="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" autopass 2>/dev/null)"
 
   local protocol
   local ip_address
+  local found
 
   if [ -z "$password" -a "$autopass" == "true" ]
   then
@@ -598,12 +642,18 @@ function startConnection()
 
   if [ ! -z "$mac" ]
   then
-    mac=( $(checkMac "$mac" "$ip_address") )
+    found=$(checkMac "$menu" "$alias" "$mac" "$ip_address" "$username" "$password")
   else
-    mac=( $(getMac "$ip_address") )
+    found=$(getMac "$menu" "$alias" "$ip_address" "$username" "$password")
   fi
 
-  if ${NMAP} -Pn -n -p 3389 --open ${mac[1]} | grep -q "^3389/tcp *open"
+  if [ -z "$found" ]
+  then
+    echo -e "${alias} ${RED}NOK (MAC not defined)${WHITE}" >&2
+    return 1
+  fi
+
+  if ${NMAP} -Pn -n -p 3389 --open ${found} | grep -q "^3389/tcp *open"
   then
     protocol=RDP
 
@@ -616,26 +666,24 @@ function startConnection()
     then
       password="$($ZENITY --entry --hide-text --title "$alias" --text "Password for user ${username}")"
     fi
-  elif ${NMAP} -Pn -n -p 5900 --open ${mac[1]} | grep -q "^5900/tcp *open"
+  elif ${NMAP} -Pn -n -p 5900 --open ${found} | grep -q "^5900/tcp *open"
   then
     protocol=VNC
   else
     protocol=SSH
   fi
 
-  (
-    $FLOCK $fd
-    if [ "$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" protocol 2>/dev/null)" != "$protocol" ]
-    then
-      echo "Update configuration file ${CONF_DIR}/${menu}.conf" >&2
-      $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" protocol $protocol
-    fi
-  ) {fd}<"${LOCK_FILE}"
-
-  if [ ! -z "${mac[1]}" ]
+  if [ ! -z "${found}" ]
   then
-    [ "$nocache" == "true" ]
-    startViewer $? "${screensize}" "${title}" "$alias" "${mac[1]}" "$protocol" "$username" "$password"
+    startViewer "$alias" "${found}" "$protocol" "$username" "$password"
+    status=$?
+
+    if [ $status -eq 0 ]
+    then
+      echo -e "${alias} ${GREEN}OK${WHITE}" >&2
+    else
+      echo -e "${alias} ${RED}NOK${WHITE}" >&2
+    fi
   fi
 
   return 0
@@ -643,19 +691,19 @@ function startConnection()
 
 function getMachines()
 {
-  local MENUS="$1"
-  local ALIAS="${2:-.*}"
-  local USERNAME="${3}"
+  local menus="$1"
+  local alias="${2:-.*}"
+  local username="$3"
 
-  for m in $MENUS
+  for m in $menus
   do
     for a in $($CRUDINI --get "${CONF_DIR}/${m}.conf" 2>/dev/null \
-               | grep -iw "$ALIAS")
+               | grep -iw "$alias")
     do
-      if [ ! -z "$USERNAME" ]
+      if [ ! -z "$username" ]
       then
         $CRUDINI --get "${CONF_DIR}/${m}.conf" "${a}" username 2>/dev/null \
-        | grep -wq "$USERNAME"
+        | grep -wq "$username"
         if [ $? -eq 0 ]
         then
           echo "$m $a"
@@ -665,15 +713,11 @@ function getMachines()
       fi
     done
   done
-
-  return 0
 }
 
 if [ -z "$DISPLAY" ]
 then
-  echo >&2
-  echo "Can't open display" >&2
-  echo >&2
+  echo -w "\nCan't open display\n" >&2
   exit 3
 fi
 
@@ -795,24 +839,24 @@ then
                ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
                MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
 
-                 if [ -z "$MAC" ]
+               if [ -z "$MAC" ]
+               then
+                 echo "${YELLOW}MAC address unknown for remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
+               else
+                 ping -c 5 "$ADDRESS" > /dev/null 2>&1
+                 if [ $? -eq 1 ]
                  then
-                   echo "${YELLOW}MAC address unknown for remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
-                 else
-                   ping -c 5 "$ADDRESS" > /dev/null 2>&1
-                   if [ $? -eq 1 ]
-                   then
-                     echo "Waking up machine \"$ALIAS\"" >&2
-                     for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                   echo "Waking up machine \"$ALIAS\"" >&2
+                   for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                   do
+                     for mac in ${MAC//,/ }
                      do
-                       for mac in ${MAC//\\|/ }
-                       do
-                         ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
-                       done
+                       ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
                      done
-                     echo 1
-                   else
-                     echo "\"$ALIAS\" already on" >&2
+                   done
+                   echo 1
+                 else
+                   echo "\"$ALIAS\" already on" >&2
                  fi
                fi
              done)
@@ -828,30 +872,9 @@ echo "$LIST" \
 | (
     while read MENU ALIAS
     do
-      USERNAME="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" username 2>/dev/null)"
-      PASSWORD="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" password 2>/dev/null)"
-      DOMAIN="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" domain 2>/dev/null)"
-      ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
-      MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
-      AUTOPASS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" autopass 2>/dev/null)"
-      NOCACHE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" nocache 2>/dev/null)"
-      SCREENSIZE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" screensize 2>/dev/null)"
-      TITLE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" title 2>/dev/null)"
+      startConnection "${MENU}" "${ALIAS}" &
 
-      (
-        startConnection "${MENU}" "${ALIAS}" "${USERNAME}" "${PASSWORD}" "${DOMAIN}" "${ADDRESS}" "${MAC}" "${AUTOPASS}" "${NOCACHE}" "${SCREENSIZE}" "${TITLE:=$ALIAS}"
-
-        status=$?
-
-        if [ $status -eq 0 ]
-        then
-          echo -e "${GREEN}OK${WHITE}"
-        else
-          echo -e "${RED}NOK [Status: $status]${WHITE}"
-        fi
-      ) &
-
-      sleep 1
+      sleep .5
     done
 
     wait
