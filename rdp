@@ -32,15 +32,18 @@ fi
 # Creates the lock file
 : >> "${LOCK_FILE}"
 
+function notify()
+{
+  [ "$INTERACTIVE" -ne 0 ] && echo "$1: $2" >&2 || $NOTIFYSEND --urgency=low --icon="$1" --app-name=$PROGRAM_NAME "$2"
+}
+
 function help()
 {
   local msg
 
   if [ ! -z "$1" ]
   then
-    msg="
-$PROGRAM_NAME: $1
-"
+    msg=$'\n'"$PROGRAM_NAME: ${RED}$1${WHITE}"$'\n'
   fi
 
   msg="$msg
@@ -55,7 +58,7 @@ Options:
 
   -s <screen>     Open on the specified screen
 
-  -l [<menu>]     Lists the available screens (for use with s option) and environments (for use with a option)
+  -l [<menu>]     Lists the available screens (for use with s option) and environments (for use with a option).
                   If a menu name is specified it lists all the machines in that menu item.
 
   -w              Open a wide screen spawning on both displays (if applicable)
@@ -73,31 +76,25 @@ Options:
   -e              Use ${ETHERWAKE} to turn on the computer remotely if possible (Works only on the same LAN)
 
 The files ${CONF_DIR}/<menu>.conf contains the definitions of machines in the form:
-[alias]
-username=<username>
-password=<password>       (optional but should be defined if the machine need a password to connect)
-domain=<domain>           (optional)
-address=<address>         (optional only if the mac is defined, otherwise mandatory)
-mac=<mac1>,<mac2>,<mac3>  (optional: it will be autofilled by the application)
+[<alias>]
+username=<username>       (Must be defined if the connection needs a username)
+password=<password>       (Must be defined if the machine need a password to connect, depends on the protocol and the configuration)
+domain=<domain>           (Used only to connect via RDP protocol to a machine that needs a domain)
+address=<address>         (Must be defined if the mac address is missing, if missing, it's autofilled if possible)
+mac=<mac1>,<mac2>,<mac3>  (If not defined, if missing, it's autofilled if possible)
 wide=true|false
-autopass=true|false       (optional, defaults to false. If true, the password field is not needed)
+autopass=true|false       (Defaults to false. If true, the line password=<password> from the file ${SECURE_DIR}/${PROGRAM_NAME}.conf is used)
 
 All fields are optional but under some conditions.
 
-Ex.: for SSH connections, the username can be the current user or defined in the ssh config file,
-     in this case it's not needed.
-     For RDP connections, if the user is unknown the program will ask for one at the connection.
+Ex. if the username is missing:
+  - For SSH connections the username can be the current user or defined in the ssh config file.
+  - For RDP connections the program will ask.
 "
 
-  echo "$msg" >&2
-  [ "$INTERACTIVE" -eq 0 ] && $ZENITY --info --title "$PROGRAM_NAME" --text "$msg"
+  [ "$INTERACTIVE" -ne 0 ] && echo "$msg" >&2 || $ZENITY --info --title "$PROGRAM_NAME" --text "$msg"
 
-  if [ ! -z "$1" ]
-  then
-    exit 1
-  else
-    exit 0
-  fi
+  [ ! -z "$1" ] && exit 1 || exit 0
 }
 
 function createIcon() {
@@ -338,7 +335,7 @@ _rdp_tab_complete () {
        then
          COMPREPLY=( \$(compgen -W $'-0\n-s\n-l\n-w\n-p\n-h\n-u\n-a\n-f' -- "\${cur}") )
        else
-         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "${CONF_DIR}"/*.conf | \\sort -u)" -- "\${cur}") ) 
+         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "${CONF_DIR}"/*.conf | \\sort -u)" -- "\${cur}") )
        fi
        ;;
   esac
@@ -360,7 +357,6 @@ function checkMac()
 
   local found=0
   local macsmb="${mac//:/-}"
-  local msg
   local localscan
   local remotescan
   local new_addr
@@ -433,9 +429,7 @@ function checkMac()
       n=$(echo "$new_addr" | wc -l)
       if [ $n -gt 1 ]
       then
-        msg="Unable to find mac address for '$alias', found $n correspondences."$'\n'"Please specify it manually!"
-        echo -e "\n${RED}$msg${WHITE}\n" >&2
-        [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
+        notify error "Unable to find mac address for '$alias', found $n correspondences."$'\n'"Please specify it manually!"
         new_addr=$address
       else
         (
@@ -452,9 +446,7 @@ function checkMac()
 
   if [ -z "$address" ]
   then
-    msg="'$alias' not found"
-    echo "$msg" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
+    notify error "'$alias' not found"
     return 1
   fi
 
@@ -516,7 +508,6 @@ function startViewer()
   local cache
   local screensize
   local title
-  local msg
 
   ping -q -c 1 "$address" > /dev/null
 
@@ -539,54 +530,61 @@ function startViewer()
       fi
     ) {fd}<"${LOCK_FILE}"
 
-    echo "${protocol} ${alias}: $(date +"%Y-%m-%d %H:%M:%S") New session started" >> ${ERROR_FILE}
-    case ${protocol} in
-      RDP)
-        nocache="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" nocache 2>/dev/null)"
-        if [ ${nocache:=0} -eq 0 ]
-        then
-          cache=
-        else
-          cache=-P
-        fi
+    (
+      echo "$(date +"%Y-%m-%d %H:%M:%S") New session started"
+      notify info "Open ${protocol} connection to ${alias}"
 
-        domain="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" domain 2>/dev/null)"
+      case ${protocol} in
+        RDP)
+          nocache="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" nocache 2>/dev/null)"
+          if [ ${nocache:=0} -eq 0 ]
+          then
+            cache=
+          else
+            cache=-P
+          fi
 
-        if [ -z "$domain" ]
-        then
-          odomain=""
-        else
-          odomain="/d:$domain"
-        fi
+          domain="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" domain 2>/dev/null)"
 
-        $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
-        ;;
+          if [ -z "$domain" ]
+          then
+            odomain=""
+          else
+            odomain="/d:$domain"
+          fi
 
-      VNC)
-        $VNCVIEWER -name "${title:=$alias}" -geometry ${screensize} ${address} 2>&1 | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
-        ;;
+          echo "$XFREERDP /t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE}"
+          $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1
+          ;;
 
-      SSH)
-        if [ -z "${username}" ]
-        then
-          cn=${address}
-        else
-          cn=${username}@${address}
-        fi
+        VNC)
+          echo "$VNCVIEWER -name \"${title:=$alias}\" -geometry ${screensize} ${address}"
+          $VNCVIEWER -name "${title:=$alias}" -geometry ${screensize} ${address} 2>&1
+          ;;
 
-        if [ -z "$password" ]
-        then
-          $TERMINAL --name "${title:=$alias}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" &
-        else
-          $SSHPASS -p"$password" $SSHCOPYID -o StrictHostKeyChecking=no "$cn" 2>/dev/null
-          $TERMINAL --name "${title:=$alias}" --tab --command "$SSHPASS -p"$password" $SSH -o StrictHostKeyChecking=no \"$cn\"" &
-        fi
-        ;;
-    esac
+        SSH)
+          if [ -z "${username}" ]
+          then
+            cn=${address}
+          else
+            cn=${username}@${address}
+          fi
+
+          if [ -z "$password" ]
+          then
+            echo "$TERMINAL --name \"${title:=$alias}\" --tab --command \"$SSH -o StrictHostKeyChecking=no \\\"$cn\\\"\""
+            $TERMINAL --name "${title:=$alias}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" 2>&1
+          else
+            echo "$SSHPASS -pXXXXXXXX $SSHCOPYID -o StrictHostKeyChecking=no \"$cn\""
+            $SSHPASS -p"$password" $SSHCOPYID -o StrictHostKeyChecking=no "$cn" 2>/dev/null
+            echo "$TERMINAL --name \"${title:=$alias}\" --tab --command \"$SSHPASS -pXXXXXXXX $SSH -o StrictHostKeyChecking=no \\\"$cn\\\"\""
+            $TERMINAL --name "${title:=$alias}" --tab --command "$SSHPASS -p"$password" $SSH -o StrictHostKeyChecking=no \"$cn\"" 2>&1
+          fi
+          ;;
+      esac
+    ) | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
   else
-    msg="Unable to open connection to machine '$alias' because '$address' is not responding."
-    echo "$msg" >&2
-    [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$msg"
+    notify error "Unable to open connection to machine '$alias' because '$address' is not responding."
     return 1
   fi
 
@@ -715,9 +713,48 @@ function getMachines()
   done
 }
 
+function wol()
+{
+  local list="$1"
+
+  local wolSleep=$(echo "$list" \
+                   | while read MENU ALIAS
+                   do
+                     ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
+                     MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
+
+                     if [ -z "$MAC" ]
+                     then
+                       echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
+                     else
+                       ping -c 5 "$ADDRESS" > /dev/null 2>&1
+                       if [ $? -eq 1 ]
+                       then
+                         echo "Waking up machine \"$ALIAS\"" >&2
+                         for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                         do
+                           for mac in ${MAC//,/ }
+                           do
+                             ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
+                           done
+                         done
+                         echo 1
+                       else
+                         echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
+                       fi
+                     fi
+                   done)
+
+  if [ ! -z "$wolSleep" ]
+  then
+    echo "${YELLOW}Waiting 15s to be sure that waked up machines are turned on${WHITE}"
+    sleep 15
+  fi
+}
+
 if [ -z "$DISPLAY" ]
 then
-  echo -w "\nCan't open display\n" >&2
+  echo -e "\nCan't open display\n" >&2
   exit 3
 fi
 
@@ -736,6 +773,7 @@ unset wakeOnLAN
 
 # Remove old error files
 find "${CONF_DIR}" -name "${ERROR_FILE_PREFIX}*.log" -mtime +30 -exec rm -f {} \;
+# Ensure that an error file is present
 touch "${ERROR_FILE}"
 ln -f "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
 
@@ -794,9 +832,7 @@ ACCESS="$(stat -c %a "${CONF_DIR}")"
 
 if [ "${ACCESS:1}" -ne "00" ]
 then
-  MSG="The access right on ${CONF_DIR} are too permissive."
-  echo "$MSG" >&2
-  [ "$INTERACTIVE" -eq 0 ] && $NOTIFYSEND --urgency=low --icon=error --app-name=$PROGRAM_NAME "$MSG"
+  notify error "The access right on ${CONF_DIR} are too permissive."
   exit 4
 fi
 
@@ -819,54 +855,11 @@ echo
 echo "Screen position: $SIZE"
 echo
 echo -n "Found $NUM_FOUND matching machine"
-if [ $NUM_FOUND -ne 1 ]
-then
-  echo "(s):"
-else
-  echo ":"
-fi
+[ $NUM_FOUND -ne 1 ] && echo "s:" || echo ":"
 echo "$LIST" | while read MENU ALIAS; do echo "$ALIAS"; done
 echo
 
-# remove old cache stale files (if present)
-\rm -f $(fuser -a -u ~/.rdesktop/cache/pstcache* 2>&1 | \grep -v "(${USER})$" | \sed "s/:$//g")
-
-if [ ! -z "$wakeOnLAN" ]
-then
-  wolSleep=$(echo "$LIST" \
-             | while read MENU ALIAS
-             do
-               ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
-               MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
-
-               if [ -z "$MAC" ]
-               then
-                 echo "${YELLOW}MAC address unknown for remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
-               else
-                 ping -c 5 "$ADDRESS" > /dev/null 2>&1
-                 if [ $? -eq 1 ]
-                 then
-                   echo "Waking up machine \"$ALIAS\"" >&2
-                   for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
-                   do
-                     for mac in ${MAC//,/ }
-                     do
-                       ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
-                     done
-                   done
-                   echo 1
-                 else
-                   echo "\"$ALIAS\" already on" >&2
-                 fi
-               fi
-             done)
-
-  if [ ! -z "$wolSleep" ]
-  then
-    echo "Waiting 15s to be sure that waked up machines are turned on"
-    sleep 15
-  fi
-fi
+[ ! -z "$wakeOnLAN" ] && wol "$LIST"
 
 echo "$LIST" \
 | (
