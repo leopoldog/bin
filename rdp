@@ -667,8 +667,12 @@ function startConnection()
   elif ${NMAP} -Pn -n -p 5900 --open ${found} | grep -q "^5900/tcp *open"
   then
     protocol=VNC
-  else
+  elif ${NMAP} -Pn -n -p 22 --open ${found} | grep -q "^22/tcp *open"
+  then
     protocol=SSH
+  else
+    notify error "Unable to establish protocol for $alias"
+    return 2
   fi
 
   if [ ! -z "${found}" ]
@@ -716,40 +720,50 @@ function getMachines()
 function wol()
 {
   local list="$1"
+  local counter=0
 
-  local wolSleep=$(echo "$list" \
-                   | while read MENU ALIAS
-                   do
-                     ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
-                     MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
+  while [ $counter -lt 30 ]
+  do
+    local wolSleep=$(echo "$list" \
+                     | while read MENU ALIAS
+                     do
+                       ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
+                       MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
 
-                     if [ -z "$MAC" ]
-                     then
-                       echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
-                     else
-                       ping -c 5 "$ADDRESS" > /dev/null 2>&1
-                       if [ $? -eq 1 ]
+                       if [ -z "$MAC" ]
                        then
-                         echo "Waking up machine \"$ALIAS\"" >&2
-                         for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
-                         do
-                           for mac in ${MAC//,/ }
-                           do
-                             ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
-                           done
-                         done
-                         echo 1
+                         echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
                        else
-                         echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
+                         ping -c 5 "$ADDRESS" > /dev/null 2>&1
+                         if [ $? -eq 1 ]
+                         then
+                           if [ $counter -eq 0 ]
+                           then
+                             echo "Waking up machine \"$ALIAS\"" >&2
+                             for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                             do
+                               for mac in ${MAC//,/ }
+                               do
+                                 ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
+                               done
+                             done
+                           fi
+                           echo 1
+                         else
+                           echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
+                         fi
                        fi
-                     fi
-                   done)
+                     done)
 
-  if [ ! -z "$wolSleep" ]
-  then
-    echo "${YELLOW}Waiting 15s to be sure that waked up machines are turned on${WHITE}"
-    sleep 15
-  fi
+    if [ -z "$wolSleep" ]
+    then
+      break;
+    fi
+
+    echo "Waiting that machines wakes up! $counter"
+    sleep 1
+    let counter=counter+1
+  done
 }
 
 if [ -z "$DISPLAY" ]
