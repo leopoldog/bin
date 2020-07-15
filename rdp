@@ -737,17 +737,14 @@ function wol()
                          ping -c 5 "$ADDRESS" > /dev/null 2>&1
                          if [ $? -eq 1 ]
                          then
-                           if [ $counter -eq 0 ]
-                           then
-                             echo "Waking up machine \"$ALIAS\"" >&2
-                             for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                           echo "Waking up machine \"$ALIAS\"" >&2
+                           for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
+                           do
+                             for mac in ${MAC//,/ }
                              do
-                               for mac in ${MAC//,/ }
-                               do
-                                 ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
-                               done
+                               ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
                              done
-                           fi
+                           done
                            echo 1
                          else
                            echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
