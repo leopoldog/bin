@@ -786,7 +786,7 @@ unset wakeOnLAN
 find "${CONF_DIR}" -name "${ERROR_FILE_PREFIX}*.log" -mtime +30 -exec rm -f {} \;
 # Ensure that an error file is present
 touch "${ERROR_FILE}"
-ln -f "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
+ln -sf "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
 
 while getopts "h0wulfes:p:a" opt
 do
