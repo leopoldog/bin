@@ -553,8 +553,8 @@ function startViewer()
             odomain="/d:$domain"
           fi
 
-          echo "$XFREERDP /t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE}"
-          $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video ${CONSOLE} 2>&1
+          echo "$XFREERDP /t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
+          $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
           ;;
 
         VNC)
@@ -582,6 +582,8 @@ function startViewer()
           fi
           ;;
       esac
+      local err=$?
+      [ $err -ne 0 ] && notify info "Connection to machine '$alias' closed! (code=$err)"
     ) | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
   else
     notify error "Unable to open connection to machine '$alias' because '$address' is not responding."
@@ -720,9 +722,9 @@ function getMachines()
 function wol()
 {
   local list="$1"
-  local counter=0
+  local counter=30
 
-  while [ $counter -lt 30 ]
+  while [ $counter -gt 0 ]
   do
     local wolSleep=$(echo "$list" \
                      | while read MENU ALIAS
@@ -759,7 +761,7 @@ function wol()
 
     echo "Waiting that machines wakes up! $counter"
     sleep 1
-    let counter=counter+1
+    let counter=counter-1
   done
 }
 
