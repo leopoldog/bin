@@ -739,7 +739,7 @@ function wol()
                          ping -c 5 "$ADDRESS" > /dev/null 2>&1
                          if [ $? -eq 1 ]
                          then
-                           echo "Waking up machine \"$ALIAS\"" >&2
+                           ${SUDO} echo "Waking up machine \"$ALIAS\"" >&2
                            for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
                            do
                              for mac in ${MAC//,/ }
