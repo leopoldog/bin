@@ -2,6 +2,8 @@
 
 . $(dirname "$0")/library.sh
 
+export LC_ALL=C
+
 PROGRAM_NAME=$(basename "$0")
 CONF_DIR=~/".rdesktop"
 LOCK_FILE="${CONF_DIR}/.lock"
@@ -509,9 +511,7 @@ function startViewer()
   local screensize
   local title
 
-  ping -q -c 1 "$address" > /dev/null
-
-  if [ $? -eq 0 -a ! -z "$address" ]
+  if [ ! -z "$address" ]
   then
     title="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" title 2>/dev/null)"
     screensize="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" screensize 2>/dev/null)"
@@ -585,9 +585,6 @@ function startViewer()
       local err=$?
       [ $err -ne 0 ] && notify info "Connection to machine '$alias' closed! (code=$err)"
     ) | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
-  else
-    notify error "Unable to open connection to machine '$alias' because '$address' is not responding."
-    return 1
   fi
 
   return 0
