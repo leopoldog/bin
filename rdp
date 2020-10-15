@@ -502,6 +502,7 @@ function startViewer()
   local protocol="$3"
   local username="$4"
   local password="$5"
+  local wide="$6"
 
   local domain
   local odomain
@@ -510,6 +511,7 @@ function startViewer()
   local cache
   local screensize
   local title
+  local owide
 
   if [ ! -z "$address" ]
   then
@@ -553,8 +555,15 @@ function startViewer()
             odomain="/d:$domain"
           fi
 
-          echo "$XFREERDP /t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
-          $XFREERDP /t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} -decorations +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
+          if [ -z "$wide" ]
+          then
+            owide="-decorations "
+          else
+            owide="/multimon "
+          fi
+
+          echo "$XFREERDP ${owide}/t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
+          $XFREERDP ${owide}/t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
           ;;
 
         VNC)
@@ -617,6 +626,7 @@ function startConnection()
 {
   local menu="$1"
   local alias="$2"
+  local wide="$3"
 
   local username="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" username 2>/dev/null)"
   local password="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" password 2>/dev/null)"
@@ -676,7 +686,7 @@ function startConnection()
 
   if [ ! -z "${found}" ]
   then
-    startViewer "$alias" "${found}" "$protocol" "$username" "$password"
+    startViewer "$alias" "${found}" "$protocol" "$username" "$password" "$wide"
     status=$?
 
     if [ $status -eq 0 ]
@@ -875,7 +885,7 @@ echo "$LIST" \
 | (
     while read MENU ALIAS
     do
-      startConnection "${MENU}" "${ALIAS}" &
+      startConnection "${MENU}" "${ALIAS}" "$wide" &
 
       sleep .5
     done
