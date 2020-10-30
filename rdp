@@ -364,7 +364,7 @@ function checkMac()
   local new_addr
   local nmap_list
 
-  if ${NMAP} -Pn -n -p 3389 --open ${address} | grep -q "^3389/tcp *open"
+  if ${NMAP} -Pn -n -p 3389,2278 --open ${address} | grep -q "^\(3389\|2278\)/tcp *open"
   then
     ${NMBLOOKUP} -R -S -A $address | grep -iq "MAC Address = \(${macsmb}\)" && found=1
   elif ${NMAP} -Pn -n -p 22 --open ${address} | grep -q "^22/tcp *open"
@@ -394,13 +394,13 @@ function checkMac()
     if [ -z "$new_addr" ]
     then
       remotescan=( $(echo "${localscan[@]}" "192.168.208.0/24" "10.122.16.0/23" | tr " " "\n" | sort | uniq -u) )
-      nmap_list=$(${NMAP} -Pn -n -p 5900,3389,23,22 --open "${remotescan[@]}" \
+      nmap_list=$(${NMAP} -Pn -n -p 5900,3389,2278,23,22 --open "${remotescan[@]}" \
                   | grep -wv "filtered\|Not shown" \
                   | tr "\n" " " \
                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
                   | sed -n "s/^\([0-9.]\+\).*SERVICE[[:space:]]\([0-9]\+\)\/tcp[[:space:]]open.*/\1 \2/p")
       new_addr=$( (echo "$nmap_list" \
-                   | sed -n "s/^\([0-9.]\+\) 3389\>/\1/p" \
+                   | sed -n "s/^\([0-9.]\+\) \(3389\|2278\)\>/\1/p" \
                    | while read addr
                      do
                        (nmblookup -R -S -A "$addr" \
@@ -503,6 +503,7 @@ function startViewer()
   local username="$4"
   local password="$5"
   local wide="$6"
+  local port="$7"
 
   local domain
   local odomain
@@ -562,8 +563,8 @@ function startViewer()
             owide="/multimon "
           fi
 
-          echo "$XFREERDP ${owide}/t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
-          $XFREERDP ${owide}/t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
+          echo "$XFREERDP ${owide}/t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address}:${port} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
+          $XFREERDP ${owide}/t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address}:${port} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
           ;;
 
         VNC)
@@ -633,6 +634,7 @@ function startConnection()
   local address="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" address 2>/dev/null)"
   local mac="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" mac 2>/dev/null)"
   local autopass="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" autopass 2>/dev/null)"
+  local port="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" port 2>/dev/null)"
 
   local protocol
   local ip_address
@@ -660,7 +662,7 @@ function startConnection()
     return 1
   fi
 
-  if ${NMAP} -Pn -n -p 3389 --open ${found} | grep -q "^3389/tcp *open"
+  if ${NMAP} -Pn -n -p 3389,2278 --open ${found} | grep -q "^\(3389\|2278\)/tcp *open"
   then
     protocol=RDP
 
@@ -686,7 +688,7 @@ function startConnection()
 
   if [ ! -z "${found}" ]
   then
-    startViewer "$alias" "${found}" "$protocol" "$username" "$password" "$wide"
+    startViewer "$alias" "${found}" "$protocol" "$username" "$password" "$wide" "${port:-3389}"
     status=$?
 
     if [ $status -eq 0 ]
