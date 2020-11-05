@@ -36,7 +36,7 @@ fi
 
 function notify()
 {
-  [ "$INTERACTIVE" -ne 0 ] && echo "$1: $2" >&2 || $NOTIFYSEND --urgency=low --icon="$1" --app-name=$PROGRAM_NAME "$2"
+  [ "$INTERACTIVE" -ne 0 ] && echo "$1: $2" >&2 || $NOTIFYSEND --urgency=low --cathegory=RDP --icon="$1" --app-name=$PROGRAM_NAME "$2"
 }
 
 function help()
