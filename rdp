@@ -748,7 +748,7 @@ function wol()
                        then
                          echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
                        else
-                         ping -c 5 "$ADDRESS" > /dev/null 2>&1
+                         ping -c 1 "$ADDRESS" > /dev/null 2>&1
                          if [ $? -eq 1 ]
                          then
                            ${SUDO} echo "Waking up machine \"$ALIAS\"" >&2
@@ -759,6 +759,7 @@ function wol()
                                ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
                              done
                            done
+                           sleep 4
                            echo 1
                          else
                            echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
