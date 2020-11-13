@@ -125,7 +125,7 @@ function regenerate()
 
     OLD_LIST=$(grep -wrl "Exec=$RDP" "${MENU_DIR_LOCAL}/${PROGRAM_NAME}@"*.desktop 2>/dev/null)
 
-    local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
+    local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do V1="$(basename "$f" .conf)"; V2="$(crudini --get "$f" DEFAULT "name" 2>/dev/null)"; echo -e "$V1\t${V2:-$V1}"; done | sort -u)
 
     cat > "${TEMP_FILE}" 2>/dev/null <<!
 <!DOCTYPE Menu
@@ -139,10 +139,10 @@ function regenerate()
     <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>
     <AppDir>${HOME}/.local/share/applications</AppDir>
     <DefaultLayout inline="false"/>
-$(echo "$MENUS" | sed "s;\(.*\);    <Menu>\n        <Name>\1</Name>\n        <Directory>\1.directory</Directory>\n        <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n        <AppDir>${HOME}/.local/share/applications</AppDir>\n        <!--Entry:\1-->\n        <Layout>\n            <Merge type=\"menus\"/>\n            <!--Layout:\1-->\n            <Merge type=\"files\"/>\n        </Layout>\n    </Menu>;g")
+$(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);    <Menu>\n        <Name>\2</Name>\n        <Directory>\1.directory</Directory>\n        <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n        <AppDir>${HOME}/.local/share/applications</AppDir>\n        <!--Entry:\1-->\n        <Layout>\n            <Merge type=\"menus\"/>\n            <!--Layout:\1-->\n            <Merge type=\"files\"/>\n        </Layout>\n    </Menu>;g")
     <Layout>
         <Merge type="menus"/>
-$(echo "$MENUS" | sed "s;\(.*\);        <Menuname>\1</Menuname>;g")
+$(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);        <Menuname>\2</Menuname>;g")
         <Merge type="files"/>
     </Layout>
   </Menu>
@@ -166,7 +166,8 @@ Version=1.0
 NoDisplay=false
 !
 
-    for MENU in $MENUS
+    echo "${MENUS}" \
+    | while read MENU MENU_NAME
       do
         FILENAME="${DESKTOP_DIR}/${MENU}.directory"
 
@@ -180,63 +181,65 @@ Icon[it_CH]=folder
 Icon[fr_CH]=folder
 Type=Directory
 Version=1.0
-Name[it_CH]=${MENU}
-Name[fr_CH]=${MENU}
-Name=${MENU}
-Comment[it_CH]=${MENU}
-Comment[fr_CH]=${MENU}
-Comment=${MENU}
+Name[it_CH]=${MENU_NAME}
+Name[fr_CH]=${MENU_NAME}
+Name=${MENU_NAME}
+Comment[it_CH]=${MENU_NAME}
+Comment[fr_CH]=${MENU_NAME}
+Comment=${MENU_NAME}
 !
         fi
       done
 
-    LIST=$(for MENU in $MENUS
-           do
-             $CRUDINI --get "${CONF_DIR}/${MENU}.conf" \
-             | sort -u \
-             | while read ALIAS
-               do
-                 PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
-                 WIDE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" wide 2>/dev/null)"
+    LIST=$(echo "${MENUS}" \
+           | while read MENU MENU_NAME
+             do
+               $CRUDINI --get "${CONF_DIR}/${MENU}.conf" \
+               | grep -wv "DEFAULT" \
+               | sort -u \
+               | while read ALIAS
+                 do
+                   PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
+                   WIDE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" wide 2>/dev/null)"
 
-                 if [ ! -z "$ALIAS" ]
-                 then
-                   if [ "$PROTOCOL" == "RDP" ]
+                   if [ ! -z "$ALIAS" ]
                    then
-                     ICON="rdp"
-                   elif [ "$PROTOCOL" == "VNC" ]
-                   then
-                     ICON="application-x-vnc"
-                   elif [ "$PROTOCOL" == "SSH" ]
-                   then
-                     ICON="utilities-terminal"
-                   fi
-
-                   NAME[0]="${ALIAS}"
-                   OPT[0]="${ALIAS}"
-
-                   if [ "$WIDE" == "true" ]
-                   then
-                     NAME[1]="${ALIAS}(wide)"
-                     OPT[1]="-w ${ALIAS}"
-                   else
-                     NAME[1]=""
-                     OPT[1]=""
-                   fi
-
-                   for i in 0 1
-                   do
-                     if [ -z "${NAME[i]}" ]
+                     if [ "$PROTOCOL" == "RDP" ]
                      then
-                       break
+                       ICON="rdp"
+                     elif [ "$PROTOCOL" == "VNC" ]
+                     then
+                       ICON="application-x-vnc"
+                     elif [ "$PROTOCOL" == "SSH" ]
+                     then
+                       ICON="utilities-terminal"
                      fi
 
-                     FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
-                     echo "${FILENAME}"
-                     sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
-                             s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                            "${TEMP_FILE}" >&2
-                     cat > "${FILENAME}" <<!
+                     NAME[0]="${ALIAS}"
+                     OPT[0]="${ALIAS}"
+
+                     if [ "$WIDE" == "true" ]
+                     then
+                       NAME[1]="${ALIAS}(wide)"
+                       OPT[1]="-w ${ALIAS}"
+                     else
+                       NAME[1]=""
+                       OPT[1]=""
+                     fi
+
+                     for i in 0 1
+                     do
+                       if [ -z "${NAME[i]}" ]
+                       then
+                         break
+                       fi
+
+                       FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
+                       echo "${FILENAME}"
+                       sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
+                               s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
+                              "${TEMP_FILE}" >&2
+                       cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
 Comment=
@@ -254,16 +257,16 @@ Type=Application
 X-KDE-SubstituteUID=false
 X-KDE-Username=
 !
-                   done
-                 fi
-               done
+                     done
+                   fi
+                 done
 
-             FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#ALL.desktop"
-             echo "${FILENAME}"
-             sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
-                     s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                    "${TEMP_FILE}" >&2
-             cat > "${FILENAME}" <<!
+               FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#ALL.desktop"
+               echo "${FILENAME}"
+               sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
+                       s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
+                      "${TEMP_FILE}" >&2
+               cat > "${FILENAME}" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
 Comment=
@@ -281,7 +284,7 @@ Type=Application
 X-KDE-SubstituteUID=false
 X-KDE-Username=
 !
-           done)
+             done)
 
     echo "$LIST
 $OLD_LIST
@@ -617,7 +620,7 @@ function list()
     if [ -f "${CONF}" ]
     then
       echo "Available machines for \"$menu\" environment:"
-      $CRUDINI --get "${CONF}"
+      $CRUDINI --get "${CONF}" | grep -wv DEFAULT
     else
       echo "Environment \"$menu\" not found!"
     fi
@@ -714,6 +717,7 @@ function getMachines()
   for m in $menus
   do
     for a in $($CRUDINI --get "${CONF_DIR}/${m}.conf" 2>/dev/null \
+               | grep -vw DEFAULT \
                | grep -iw "$alias")
     do
       if [ ! -z "$username" ]
