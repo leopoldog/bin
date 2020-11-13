@@ -171,9 +171,11 @@ NoDisplay=false
       do
         FILENAME="${DESKTOP_DIR}/${MENU}.directory"
 
-        if [ ! -z "${MENU}" -a ! -f "${FILENAME}" ]
+        if [ ! -z "${MENU}" ]
         then
-          cat > "${FILENAME}" <<!
+          if [ ! -f "${FILENAME}" -o "${FILENAME}" -ot "${CONF_DIR}/${MENU}.conf" ]
+          then
+            cat > "${FILENAME}" <<!
 [Desktop Entry]
 Encoding=UTF-8
 Icon=folder
@@ -188,6 +190,7 @@ Comment[it_CH]=${MENU_NAME}
 Comment[fr_CH]=${MENU_NAME}
 Comment=${MENU_NAME}
 !
+          fi
         fi
       done
 
