@@ -204,6 +204,7 @@ Comment=${MENU_NAME}
                  do
                    PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
                    WIDE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" wide 2>/dev/null)"
+                   DESCRIPTION="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" description 2>/dev/null)"
 
                    if [ ! -z "$ALIAS" ]
                    then
@@ -220,14 +221,17 @@ Comment=${MENU_NAME}
 
                      NAME[0]="${ALIAS}"
                      OPT[0]="${ALIAS}"
+                     DESC[0]="${DESCRIPTION:-${ALIAS}}"
 
                      if [ "$WIDE" == "true" ]
                      then
                        NAME[1]="${ALIAS}(wide)"
                        OPT[1]="-w ${ALIAS}"
+                       DESC[1]="${DESC[0]} (wide)"
                      else
                        NAME[1]=""
                        OPT[1]=""
+                       DESC[1]=""
                      fi
 
                      for i in 0 1
@@ -250,7 +254,7 @@ Exec=$RDP ${OPT[i]}
 GenericName=
 Hidden=false
 Icon=${ICON}
-Name=${NAME[i]}
+Name=${DESC[i]}
 NoDisplay=false
 Path=
 StartupNotify=true
