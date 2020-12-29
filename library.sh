@@ -73,10 +73,10 @@ function getMacViaSSH()
   if [ -z "$PASS" ]
   then
     [ -z "$SSH" ] && checkDependencies ssh
-    BUFFER="$($SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
+    BUFFER="$($SSH -oConnectTimeout=5 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
   else
     [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
-    BUFFER="$($SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
+    BUFFER="$($SSHPASS -p"$PASS" $SSH -oConnectTimeout=5 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/sbin/ip addr show primary || /bin/ip addr show primary || /sbin/esxcfg-info -n" 2>&1)"
   fi
 
   echo $(echo "$BUFFER" \
@@ -106,10 +106,10 @@ function checkMacViaSSH()
     if [ -z "$PASS" ]
     then
       [ -z "$SSH" ] && checkDependencies ssh
-      $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
+      $SSH -oConnectTimeout=5 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
     else
       [ -z "$SSH" -o -z "$SSHPASS" ] && checkDependencies ssh sshpass
-      $SSHPASS -p"$PASS" $SSH -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
+      $SSHPASS -p"$PASS" $SSH -oConnectTimeout=5 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -nq ${CN} "/bin/ip addr show primary || /sbin/ip addr show primary || /sbin/esxcfg-nics -l"
     fi
   ) | grep -q "\<\(${MAC}\)\>"
 }
