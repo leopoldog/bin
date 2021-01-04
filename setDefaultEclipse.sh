@@ -20,11 +20,17 @@ find . -name ".default.settings" -type l \
     | sed "s/\\\\/\\\\\\\\/g" \
     | while read file key value
     do
-      $CRUDINI --verbose --set "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file" "" "$key" "$value" 2>&1 | grep -wv "^unchanged:"
+      if [ -f "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file" ]
+      then
+        $CRUDINI --verbose --set "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file" "" "$key" "$value" 2>&1 | grep -wv "^unchanged:"
+      fi
     done
 
     for file in $LIST
     do
-      sed -i "s/  *= */=/" "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file"
+      if [ -f "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file" ]
+      then
+        sed -i "s/  *= */=/" "$location/.metadata/.plugins/org.eclipse.core.runtime/.settings/$file"
+      fi
     done
   done
