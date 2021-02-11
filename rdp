@@ -789,6 +789,17 @@ function wol()
   done
 }
 
+function checkDoubles()
+{
+  local doubles="$(grep -h "\[" "${CONF_DIR}"/*.conf | sort | uniq -c | grep -v " *1 " | sed "s/ *[0-9]\+ \+\[\(.*\)]$/\1/")"
+
+  if [ ! -z "$doubles" ]
+  then
+    echo -e "Double definitions found:\n$doubles" >&2
+    exit 2
+  fi
+}
+
 if [ -z "$DISPLAY" ]
 then
   echo -e "\nCan't open display\n" >&2
@@ -817,7 +828,8 @@ ln -sf "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
 while getopts "h0wulfes:p:a" opt
 do
   case $opt in
-    u) regenerate
+    u) checkDoubles
+       regenerate
        exit 0
        ;;
 
