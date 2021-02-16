@@ -79,13 +79,13 @@ Options:
 
 The files ${CONF_DIR}/<menu>.conf contains the definitions of machines in the form:
 [<alias>]
-username=<username>       (Must be defined if the connection needs a username)
-password=<password>       (Must be defined if the machine need a password to connect, depends on the protocol and the configuration)
-domain=<domain>           (Used only to connect via RDP protocol to a machine that needs a domain)
-address=<address>         (Must be defined if the mac address is missing, if missing, it's autofilled if possible)
-mac=<mac1>,<mac2>,<mac3>  (If not defined, if missing, it's autofilled if possible)
-wide=true|false
-autopass=true|false       (Defaults to false. If true, the line password=<password> from the file ${SECURE_DIR}/${PROGRAM_NAME}.conf is used)
+username = <username>         (Must be defined if the connection needs a username)
+password = <password>         (Must be defined if the machine need a password to connect, depends on the protocol and the configuration)
+domain = <domain>             (Used only to connect via RDP protocol to a machine that needs a domain)
+address = <address>           (Must be defined if the mac address is missing, if missing, it's autofilled if possible)
+mac = *|<mac1>,<mac2>,<mac3>  (If not defined or if missing, it's autofilled if possible, * means no mac check)
+wide = true|false
+autopass = <id>               (Defaults to empty. If <id> is specified, the line password=<password> from the file ${SECURE_DIR}/${PROGRAM_NAME}-<id>.conf is used)
 
 All fields are optional but under some conditions.
 
@@ -377,7 +377,12 @@ function checkMac()
 
   if ${NMAP} -Pn -n -p ${portRDP} --open ${address} | grep -q "^${portRDP}/tcp *open"
   then
-    ${NMBLOOKUP} -R -S -A $address | grep -iq "MAC Address = \(${macsmb}\)" && found=1
+    if [ "${mac}" == "*" ]
+    then
+      found=1
+    else
+      ${NMBLOOKUP} -R -S -A $address | grep -iq "MAC Address = \(${macsmb}\)" && found=1
+    fi
   elif ${NMAP} -Pn -n -p 22 --open ${address} | grep -q "^22/tcp *open"
   then
     getMacViaSSH "${username}" "${address}" "${password}" | grep -iq "\($mac\)" && found=1
@@ -471,36 +476,50 @@ function getMac()
 {
   local menu="$1"
   local alias="$2"
-  local address="$3"
-  local username="$4"
-  local password="$5"
-  local mac=$(${NMBLOOKUP} -R -S -A $address \
-              | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
-              | tr "[:upper:]-" "[:lower:]:")
+  local mac="$3"
+  local address="$4"
+  local username="$5"
+  local password="$6"
+  local newmac
 
-  if [ -z "$mac" -o "$mac" == "00:00:00:00:00:00" ]
+  if [ "${mac}" != "*" ]
   then
-    mac=$($ARP -n -a "${address}" \
-          | sed -n "s;.*($address) at \([^ ]*\) \[ether\].*;\1;p")
+    newmac=$(${NMBLOOKUP} -R -S -A $address \
+             | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
+             | tr "[:upper:]-" "[:lower:]:")
+  fi
 
-    if [ -z "$mac" ]
+  if [ -z "$newmac" -o "$newmac" == "00:00:00:00:00:00" ]
+  then
+    newmac=$($ARP -n -a "${address}" \
+             | sed -n "s;.*($address) at \([^ ]*\) \[ether\].*;\1;p")
+
+    if [ -z "$newmac" ]
     then
-      mac=$(getMacViaSSH "${username}" "${address}" "${password}")
+      newmac=$(getMacViaSSH "${username}" "${address}" "${password}")
+
+      if [ -z "$newmac" ]
+      then
+        newmac="$mac"
+      fi
     fi
   fi
 
-  if [ -z "$mac" ]
+  if [ "${newmac}" != "*" ]
   then
-    echo "Unable to find MAC address" >&2
-    return 1
-  fi
+    if [ -z "$newmac" ]
+    then
+      echo "Unable to find MAC address" >&2
+      return 1
+    fi
 
-  (
-    $FLOCK $fd
-    echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$address, mac=$mac" >&2
-    $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address "$address"
-    $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "$mac"
-  ) {fd}<"${LOCK_FILE}"
+    (
+      $FLOCK $fd
+      echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$address, mac=$mac" >&2
+      $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address "$address"
+      $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "$newmac"
+    ) {fd}<"${LOCK_FILE}"
+  fi
 
   echo $address
   return 0
@@ -653,9 +672,9 @@ function startConnection()
 
   portRDP="${portRDP:-3389}"
 
-  if [ -z "$password" -a "$autopass" == "true" ]
+  if [ -z "$password" -a ! -z "$autopass" ]
   then
-    password="$(sed -n "s/password=\(.*\)/\1/p" ${SECURE_DIR}/${PROGRAM_NAME}.conf)"
+    . ${SECURE_DIR}/${PROGRAM_NAME}-${autopass}.conf
   fi
 
   ip_address=$($HOST "$address" \
@@ -666,7 +685,7 @@ function startConnection()
   then
     found=$(checkMac "$menu" "$alias" "$mac" "$ip_address" "$username" "$password" $portRDP)
   else
-    found=$(getMac "$menu" "$alias" "$ip_address" "$username" "$password")
+    found=$(getMac "$menu" "$alias" "$mac" "$ip_address" "$username" "$password")
   fi
 
   if [ -z "$found" ]
