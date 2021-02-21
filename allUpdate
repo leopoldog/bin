@@ -1,11 +1,19 @@
 #!/bin/bash
 
-find . -xdev -type d -name ".git" -or -name ".svn" \
+if [ "$1" == "-a" ]
+then
+  # Update the whole disks, but with the informations of the last updatedb
+  locate -r "/\(\.git\|\.svn\)$"
+else
+  # Update only the local directory and subdirectories
+  find . -xdev -type d -name ".git" -or -name ".svn"
+fi \
+| grep -avw "old" \
+| sed "s;/\.\(git\|svn\)$;;g" \
 | sort -u \
-| grep -v "\.old\>" \
 | while read f
   do
-    pushd "$(dirname "$f")" > /dev/null 2>&1
+    pushd "$f" > /dev/null 2>&1
     update
     popd > /dev/null 2>&1
     echo
