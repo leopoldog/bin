@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 . $(dirname "$0")/library.sh
 
@@ -6,18 +6,18 @@ export LC_ALL=C
 
 PROGRAM_NAME=$(basename "$0")
 CONF_DIR=~/".rdesktop"
-LOCK_FILE="${CONF_DIR}/.lock"
+LOCK_FILE="$CONF_DIR/.lock"
 MENU_DIR_CONFIG=~/".config/menus/applications-merged"
 MENU_DIR_LOCAL=~/".local/share/applications"
 DESKTOP_DIR=~/".local/share/desktop-directories"
 ICONS_DIR=~/".local/share/icons"
 BASH_COMPLETION_FILE=~/".bash_completion"
-BASH_COMPLETION_DIR="${BASH_COMPLETION_FILE}.d"
+BASH_COMPLETION_DIR="$BASH_COMPLETION_FILE.d"
 SECURE_DIR=~/"secure"
 MENU_FILENAME="remote-access.menu"
 DIR_FILENAME="remote-access.directory"
 ERROR_FILE_PREFIX="error"
-ERROR_FILE="${CONF_DIR}/${ERROR_FILE_PREFIX}-$(date --iso-8601).log"
+ERROR_FILE="$CONF_DIR/$ERROR_FILE_PREFIX-$(date --iso-8601).log"
 
 if [ -z "$GIO_LAUNCHED_DESKTOP_FILE_PID" ]
 then
@@ -26,17 +26,17 @@ else
   INTERACTIVE=0
 fi
 
-if ! checkDependencies $PROGRAM_NAME ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64 etherwake sudo host ipcalc
+if ! checkDependencies "$PROGRAM_NAME" ssh sshpass ssh-copy-id xmlstarlet nmap arp xfreerdp zenity flock vncviewer terminal:mate-terminal,gnome-terminal xrandr xwininfo notify-send crudini nmblookup ip base64 etherwake sudo host ipcalc
 then
   exit -1
 fi
 
 # Creates the lock file
-: >> "${LOCK_FILE}"
+: >> "$LOCK_FILE"
 
 function notify()
 {
-  [ "$INTERACTIVE" -ne 0 ] && echo "$1: $2" >&2 || $NOTIFYSEND --urgency=low --category=RDP --icon="$1" --app-name=$PROGRAM_NAME "$2"
+  [ $INTERACTIVE -ne 0 ] && echo "$1: $2" >&2 || "$NOTIFYSEND" --urgency=low --category=RDP --icon="$1" --app-name="$PROGRAM_NAME" "$2"
 }
 
 function help()
@@ -45,7 +45,7 @@ function help()
 
   if [ ! -z "$1" ]
   then
-    msg=$'\n'"$PROGRAM_NAME: ${RED}$1${WHITE}"$'\n'
+    msg=$'\n'"$PROGRAM_NAME: $RED$1$WHITE"$'\n'
   fi
 
   msg="$msg
@@ -75,9 +75,9 @@ Options:
 
   -f              Full screen (ignore menu bars height)
 
-  -e              Use ${ETHERWAKE} to turn on the computer remotely if possible (Works only on the same LAN)
+  -e              Use $ETHERWAKE to turn on the computer remotely if possible (Works only on the same LAN)
 
-The files ${CONF_DIR}/<menu>.conf contains the definitions of machines in the form:
+The files $CONF_DIR/<menu>.conf contains the definitions of machines in the form:
 [<alias>]
 username = <username>         (Must be defined if the connection needs a username)
 password = <password>         (Must be defined if the machine need a password to connect, depends on the protocol and the configuration)
@@ -85,7 +85,7 @@ domain = <domain>             (Used only to connect via RDP protocol to a machin
 address = <address>           (Must be defined if the mac address is missing, if missing, it's autofilled if possible)
 mac = *|<mac1>,<mac2>,<mac3>  (If not defined or if missing, it's autofilled if possible, * means no mac check)
 wide = true|false
-autopass = <id>               (Defaults to empty. If <id> is specified, the line password=<password> from the file ${SECURE_DIR}/${PROGRAM_NAME}-<id>.conf is used)
+autopass = <id>               (Defaults to empty. If <id> is specified, the line password=<password> from the file $SECURE_DIR/$PROGRAM_NAME-<id>.conf is used)
 
 All fields are optional but under some conditions.
 
@@ -94,19 +94,19 @@ Ex. if the username is missing:
   - For RDP connections the program will ask.
 "
 
-  [ "$INTERACTIVE" -ne 0 ] && echo "$msg" >&2 || $ZENITY --info --title "$PROGRAM_NAME" --text "$msg"
+  [ $INTERACTIVE -ne 0 ] && echo "$msg" >&2 || "$ZENITY" --info --title "$PROGRAM_NAME" --text "$msg"
 
   [ ! -z "$1" ] && exit 1 || exit 0
 }
 
 function createIcon() {
-  local ICON_FILE="${ICONS_DIR}/rdp.png"
+  local ICON_FILE="$ICONS_DIR/rdp.png"
 
-  if [ ! -f "${ICON_FILE}" ]
+  if [ ! -f "$ICON_FILE" ]
   then
-    mkdir -p "${ICONS_DIR}"
-    grep -A 999999 "^#### BASE64 ####" "$0" | tail -n +2 | ${BASE64} -d > "${ICON_FILE}"
-    chmod 444 "${ICON_FILE}"
+    mkdir -p "$ICONS_DIR"
+    grep -A 999999 "^#### BASE64 ####" "$0" | tail -n +2 | "$BASE64" -d > "$ICON_FILE"
+    chmod 444 "$ICON_FILE"
   fi
 }
 
@@ -115,19 +115,19 @@ function regenerate()
   echo "Create access description for : "
 
   (
-    $FLOCK $fd
+    "$FLOCK" $fd
     local TEMP_FILE="$(mktemp -u)"
 
     createIcon
 
-    mkdir -p "${MENU_DIR_CONFIG}" "${MENU_DIR_LOCAL}" "${DESKTOP_DIR}" "${SECURE_DIR}" "${CONF_DIR}"
-    chmod 700 "${CONF_DIR}"
+    mkdir -p "$MENU_DIR_CONFIG" "$MENU_DIR_LOCAL" "$DESKTOP_DIR" "$SECURE_DIR" "$CONF_DIR"
+    chmod 700 "$CONF_DIR"
 
-    OLD_LIST=$(grep -wrl "Exec=$RDP" "${MENU_DIR_LOCAL}/${PROGRAM_NAME}@"*.desktop 2>/dev/null)
+    OLD_LIST=$(grep -wrl "Exec=$RDP" "$MENU_DIR_LOCAL/$PROGRAM_NAME@"*.desktop 2>/dev/null)
 
-    local MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do V1="$(basename "$f" .conf)"; V2="$(crudini --get "$f" DEFAULT "name" 2>/dev/null)"; echo -e "$V1\t${V2:-$V1}"; done | sort -u)
+    local MENUS=$(ls -1 "$CONF_DIR"/*.conf | while read f; do V1="$(basename "$f" .conf)"; V2="$(crudini --get "$f" DEFAULT "name" 2>/dev/null)"; echo -e "$V1\t${V2:-$V1}"; done | sort -u)
 
-    cat > "${TEMP_FILE}" 2>/dev/null <<!
+    cat > "$TEMP_FILE" 2>/dev/null <<!
 <!DOCTYPE Menu
   PUBLIC '-//freedesktop//DTD Menu 1.0//EN'
   'http://standards.freedesktop.org/menu-spec/menu-1.0.dtd'>
@@ -136,10 +136,10 @@ function regenerate()
   <Menu>
     <Name>RemoteAccess</Name>
     <Directory>remote-access.directory</Directory>
-    <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>
-    <AppDir>${HOME}/.local/share/applications</AppDir>
+    <DirectoryDir>$HOME/.local/share/desktop-directories</DirectoryDir>
+    <AppDir>$HOME/.local/share/applications</AppDir>
     <DefaultLayout inline="false"/>
-$(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);    <Menu>\n        <Name>\2</Name>\n        <Directory>\1.directory</Directory>\n        <DirectoryDir>${HOME}/.local/share/desktop-directories</DirectoryDir>\n        <AppDir>${HOME}/.local/share/applications</AppDir>\n        <!--Entry:\1-->\n        <Layout>\n            <Merge type=\"menus\"/>\n            <!--Layout:\1-->\n            <Merge type=\"files\"/>\n        </Layout>\n    </Menu>;g")
+$(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);    <Menu>\n        <Name>\2</Name>\n        <Directory>\1.directory</Directory>\n        <DirectoryDir>$HOME/.local/share/desktop-directories</DirectoryDir>\n        <AppDir>$HOME/.local/share/applications</AppDir>\n        <!--Entry:\1-->\n        <Layout>\n            <Merge type=\"menus\"/>\n            <!--Layout:\1-->\n            <Merge type=\"files\"/>\n        </Layout>\n    </Menu>;g")
     <Layout>
         <Merge type="menus"/>
 $(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);        <Menuname>\2</Menuname>;g")
@@ -149,7 +149,7 @@ $(echo "$MENUS" | sed "s;\([^\t]*\)\t\(.*\);        <Menuname>\2</Menuname>;g")
 </Menu>
 !
 
-    cat > "${DESKTOP_DIR}/${DIR_FILENAME}" <<!
+    cat > "$DESKTOP_DIR/$DIR_FILENAME" <<!
 [Desktop Entry]
 Comment=Remote Access
 Comment[it_CH]=Accesso Remoto
@@ -166,16 +166,16 @@ Version=1.0
 NoDisplay=false
 !
 
-    echo "${MENUS}" \
+    echo "$MENUS" \
     | while read MENU MENU_NAME
       do
-        FILENAME="${DESKTOP_DIR}/${MENU}.directory"
+        FILENAME="$DESKTOP_DIR/$MENU.directory"
 
-        if [ ! -z "${MENU}" ]
+        if [ ! -z "$MENU" ]
         then
-          if [ ! -f "${FILENAME}" -o "${FILENAME}" -ot "${CONF_DIR}/${MENU}.conf" ]
+          if [ ! -f "$FILENAME" -o "$FILENAME" -ot "$CONF_DIR/$MENU.conf" ]
           then
-            cat > "${FILENAME}" <<!
+            cat > "$FILENAME" <<!
 [Desktop Entry]
 Encoding=UTF-8
 Icon=folder
@@ -183,28 +183,28 @@ Icon[it_CH]=folder
 Icon[fr_CH]=folder
 Type=Directory
 Version=1.0
-Name[it_CH]=${MENU_NAME}
-Name[fr_CH]=${MENU_NAME}
-Name=${MENU_NAME}
-Comment[it_CH]=${MENU_NAME}
-Comment[fr_CH]=${MENU_NAME}
-Comment=${MENU_NAME}
+Name[it_CH]=$MENU_NAME
+Name[fr_CH]=$MENU_NAME
+Name=$MENU_NAME
+Comment[it_CH]=$MENU_NAME
+Comment[fr_CH]=$MENU_NAME
+Comment=$MENU_NAME
 !
           fi
         fi
       done
 
-    LIST=$(echo "${MENUS}" \
+    LIST=$(echo "$MENUS" \
            | while read MENU MENU_NAME
              do
-               $CRUDINI --get "${CONF_DIR}/${MENU}.conf" \
+               "$CRUDINI" --get "$CONF_DIR/$MENU.conf" \
                | grep -wv "DEFAULT" \
                | sort -u \
                | while read ALIAS
                  do
-                   PROTOCOL="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" protocol 2>/dev/null)"
-                   WIDE="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" wide 2>/dev/null)"
-                   DESCRIPTION="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" description 2>/dev/null)"
+                   PROTOCOL="$("$CRUDINI" --get "$CONF_DIR/$MENU.conf" "$ALIAS" protocol 2>/dev/null)"
+                   WIDE="$("$CRUDINI" --get "$CONF_DIR/$MENU.conf" "$ALIAS" wide 2>/dev/null)"
+                   DESCRIPTION="$("$CRUDINI" --get "$CONF_DIR/$MENU.conf" "$ALIAS" description 2>/dev/null)"
 
                    if [ ! -z "$ALIAS" ]
                    then
@@ -219,14 +219,14 @@ Comment=${MENU_NAME}
                        ICON="utilities-terminal"
                      fi
 
-                     NAME[0]="${ALIAS}"
-                     OPT[0]="${ALIAS}"
-                     DESC[0]="${DESCRIPTION:-${ALIAS}}"
+                     NAME[0]="$ALIAS"
+                     OPT[0]="$ALIAS"
+                     DESC[0]="${DESCRIPTION:-$ALIAS}"
 
                      if [ "$WIDE" == "true" ]
                      then
-                       NAME[1]="${ALIAS}(wide)"
-                       OPT[1]="-w ${ALIAS}"
+                       NAME[1]="$ALIAS(wide)"
+                       OPT[1]="-w $ALIAS"
                        DESC[1]="${DESC[0]} (wide)"
                      else
                        NAME[1]=""
@@ -241,19 +241,19 @@ Comment=${MENU_NAME}
                          break
                        fi
 
-                       FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#${NAME[i]}.desktop"
-                       echo "${FILENAME}"
-                       sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
-                               s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                              "${TEMP_FILE}" >&2
-                       cat > "${FILENAME}" <<!
+                       FILENAME="$MENU_DIR_LOCAL/$PROGRAM_NAME@$MENU#${NAME[i]}.desktop"
+                       echo "$FILENAME"
+                       sed -i "s;\(        <!--Entry:$MENU-->\);        <Include><Filename>$(basename "$FILENAME")</Filename></Include>\n\1;g;
+                               s;\(            <!--Layout:$MENU-->\);            <Filename>$(basename "$FILENAME")</Filename>\n\1;g;" \
+                              "$TEMP_FILE" >&2
+                       cat > "$FILENAME" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
 Comment=
 Exec=$RDP ${OPT[i]}
 GenericName=
 Hidden=false
-Icon=${ICON}
+Icon=$ICON
 Name=${DESC[i]}
 NoDisplay=false
 Path=
@@ -268,16 +268,16 @@ X-KDE-Username=
                    fi
                  done
 
-               FILENAME="${MENU_DIR_LOCAL}/${PROGRAM_NAME}@${MENU}#ALL.desktop"
-               echo "${FILENAME}"
-               sed -i "s;\(        <!--Entry:${MENU}-->\);        <Include><Filename>$(basename ${FILENAME})</Filename></Include>\n\1;g;
-                       s;\(            <!--Layout:${MENU}-->\);            <Filename>$(basename ${FILENAME})</Filename>\n\1;g;" \
-                      "${TEMP_FILE}" >&2
-               cat > "${FILENAME}" <<!
+               FILENAME="$MENU_DIR_LOCAL/$PROGRAM_NAME@$MENU#ALL.desktop"
+               echo "$FILENAME"
+               sed -i "s;\(        <!--Entry:$MENU-->\);        <Include><Filename>$(basename "$FILENAME")</Filename></Include>\n\1;g;
+                       s;\(            <!--Layout:$MENU-->\);            <Filename>$(basename "$FILENAME")</Filename>\n\1;g;" \
+                      "$TEMP_FILE" >&2
+               cat > "$FILENAME" <<!
 [Desktop Entry]
 Categories=RemoteAccess;
 Comment=
-Exec=$RDP -a ${MENU}
+Exec=$RDP -a $MENU
 GenericName=
 Hidden=false
 Icon=dialog-question
@@ -303,12 +303,12 @@ $OLD_LIST" \
         if [ "$f" != "$file" ]
         then
           case "$op" in
-            1) echo "Created  $(basename $file)"
+            1) echo "Created  $(basename "$file")"
                ;;
-            2) echo "Deleted  $(basename $file)"
+            2) echo "Deleted  $(basename "$file")"
                rm -f "$file"
                ;;
-            3) echo "Replaced $(basename $file)"
+            3) echo "Replaced $(basename "$file")"
                ;;
             *) echo "$file (INTERNAL ERROR)"
                ;;
@@ -319,21 +319,21 @@ $OLD_LIST" \
       done \
     | sort -k2
 
-    $XMLSTARLET fo "${TEMP_FILE}" > "${MENU_DIR_CONFIG}/${MENU_FILENAME}"
+    "$XMLSTARLET" fo "$TEMP_FILE" > "$MENU_DIR_CONFIG/$MENU_FILENAME"
 
     rm -f "$TEMP_FILE"
-  ) {fd}<"${LOCK_FILE}"
+  ) {fd}<"$LOCK_FILE"
 
-  if [ ! -f "${BASH_COMPLETION_FILE}" ]
+  if [ ! -f "$BASH_COMPLETION_FILE" ]
   then
-    echo "for bcfile in ~/.bash_completion.d/*; do [ -f \"\$bcfile\" ] && . \"\$bcfile\"; done" > "${BASH_COMPLETION_FILE}"
+    echo "for bcfile in ~/.bash_completion.d/*; do [ -f \"\$bcfile\" ] && . \"\$bcfile\"; done" > "$BASH_COMPLETION_FILE"
   fi
 
-  if [ ! -f "${BASH_COMPLETION_DIR}/${PROGRAM_NAME}" ]
+  if [ ! -f "$BASH_COMPLETION_DIR/$PROGRAM_NAME" ]
   then
-    mkdir -p "${BASH_COMPLETION_DIR}"
+    mkdir -p "$BASH_COMPLETION_DIR"
 
-    cat > "${BASH_COMPLETION_DIR}/${PROGRAM_NAME}" <<!
+    cat > "$BASH_COMPLETION_DIR/$PROGRAM_NAME" <<!
 _rdp_tab_complete () {
   local cur prev
   COMPREPLY=()
@@ -341,13 +341,13 @@ _rdp_tab_complete () {
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
   case "\$prev" in
-    -a|-l) IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\ls -1 "${CONF_DIR}"/*.conf | \\sed -n "s:.*/\([^/]*\)\.conf:'\1':p")" -- "\${cur}") ) ;;
-    -s) COMPREPLY=( \$(compgen -W "\$(\\xrandr -q | \\grep -w connected | \\sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\1/p")" -- "\${cur}") ) ;;
+    -a|-l) IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\ls -1 "$CONF_DIR"/*.conf | \\sed -n "s:.*/\([^/]*\)\.conf:'\1':p")" -- "\$cur") ) ;;
+    -s) COMPREPLY=( \$(compgen -W "\$(\\xrandr -q | \\grep -w connected | \\sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\1/p")" -- "\$cur") ) ;;
     *) if [ "\${cur:0:1}" == "-" ]
        then
-         COMPREPLY=( \$(compgen -W $'-0\n-s\n-l\n-w\n-p\n-h\n-u\n-a\n-f' -- "\${cur}") )
+         COMPREPLY=( \$(compgen -W $'-0\n-s\n-l\n-w\n-p\n-h\n-u\n-a\n-f' -- "\$cur") )
        else
-         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "${CONF_DIR}"/*.conf | \\sort -u)" -- "\${cur}") )
+         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "$CONF_DIR"/*.conf | \\sort -u)" -- "\$cur") )
        fi
        ;;
   esac
@@ -375,48 +375,53 @@ function checkMac()
   local new_addr
   local nmap_list
 
-  if ${NMAP} -Pn -n -p ${portRDP} --open ${address} | grep -q "^${portRDP}/tcp *open"
+  if "$NMAP" -Pn -n -p "$portRDP" --open "$address" | grep -q "^$portRDP/tcp *open"
   then
-    if [ "${mac}" == "*" ]
+    if [ "$mac" == "*" ]
+    then
+      found=1
+    elif "$ARP" -n "$address" | grep -q "\<$mac\>"
     then
       found=1
     else
-      ${NMBLOOKUP} -R -S -A $address | grep -iq "MAC Address = \(${macsmb}\)" && found=1
+      "$NMBLOOKUP" -R -S -A "$address" | grep -iq "MAC Address = \($macsmb\)" && found=1
     fi
-  elif ${NMAP} -Pn -n -p 22 --open ${address} | grep -q "^22/tcp *open"
+  elif "$NMAP" -Pn -n -p 22 --open "$address" | grep -q "^22/tcp *open"
   then
-    getMacViaSSH "${username}" "${address}" "${password}" | grep -iq "\($mac\)" && found=1
+    getMacViaSSH "$username" "$address" "$password" | grep -iq "\($mac\)" && found=1
   fi
 
   if [ $found -eq 0 ]
   then
-    localscan=( $(echo "$($IP addr \
-                          | sed -n "s/ *inet \([0-9./]*\) .*/\1/p" \
-                          | grep -v "^127")" \
+    localscan=( $(echo "$("$IP" addr show scope global \
+                          | sed "s/^[^ ]/#&/g" \
+                          | tr "\n#" " \n" \
+                          | grep -v docker \
+                          | sed -n "s/.* inet \([0-9./]*\) .*/\1/p")" \
                   | tr " " "\n" \
                   | sort -u \
                   | while read n
                     do
-                      $IPCALC $n \
+                      "$IPCALC" $n \
                       | grep "^Network" \
                       | sed "s/.*: \+\([0-9./]\+\) \+.*/\1/g"
                     done \
                   | sort -u) )
 
-    ${NMAP} -sP "${localscan[@]}" > /dev/null 2>&1
+    "$NMAP" -sP "${localscan[@]}" > /dev/null 2>&1
 
-    new_addr=$($ARP -n | sed -n "s/^\([^ ]*\) \+ether \+\(${mac}\) \+.*/\1/p" | sort -u)
+    new_addr=$("$ARP" -n | sed -n "s/^\([^ ]*\) \+ether \+\($mac\) \+.*/\1/p" | sort -u)
 
     if [ -z "$new_addr" ]
     then
       remotescan=( $(echo "${localscan[@]}" "192.168.208.0/24" "10.122.16.0/23" | tr " " "\n" | sort | uniq -u) )
-      nmap_list=$(${NMAP} -Pn -n -p 5900,${portRDP},23,22 --open "${remotescan[@]}" \
+      nmap_list=$("$NMAP" -Pn -n -p 5900,$portRDP,23,22 --open "${remotescan[@]}" \
                   | grep -wv "filtered\|Not shown" \
                   | tr "\n" " " \
                   | sed "s/\(Nmap scan report for \|Interesting ports on \|The 1 scanned port on \)/\n/g" \
                   | sed -n "s/^\([0-9.]\+\).*SERVICE[[:space:]]\([0-9]\+\)\/tcp[[:space:]]open.*/\1 \2/p")
       new_addr=$( (echo "$nmap_list" \
-                   | sed -n "s/^\([0-9.]\+\) ${portRDP}\>/\1/p" \
+                   | sed -n "s/^\([0-9.]\+\) $portRDP\>/\1/p" \
                    | while read addr
                      do
                        (nmblookup -R -S -A "$addr" \
@@ -433,7 +438,7 @@ function checkMac()
                    | sed -n "s/^\([0-9.]\+\) 22\>/\1/p" \
                    | while read ip_addr
                      do
-                       (if checkMacViaSSH "${username}" "${ip_addr}" "${mac}" "${password}"
+                       (if checkMacViaSSH "$username" "$ip_addr" "$mac" "$password"
                         then
                           echo $ip_addr
                         fi) &
@@ -451,11 +456,11 @@ function checkMac()
         new_addr=$address
       else
         (
-          $FLOCK $fd
-          echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$new_addr, mac=${mac//\\|/,}" >&2
-          $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address $new_addr
-          $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "${mac//\\|/,}"
-        ) {fd}<"${LOCK_FILE}"
+          "$FLOCK" $fd
+          echo "Update configuration file $CONF_DIR/$menu.conf for alias=$alias: address=$new_addr, mac=${mac//\\|/,}" >&2
+          "$CRUDINI" --set "$CONF_DIR/$menu.conf" "$alias" address $new_addr
+          "$CRUDINI" --set "$CONF_DIR/$menu.conf" "$alias" mac "${mac//\\|/,}"
+        ) {fd}<"$LOCK_FILE"
       fi
     fi
 
@@ -482,21 +487,21 @@ function getMac()
   local password="$6"
   local newmac
 
-  if [ "${mac}" != "*" ]
+  if [ "$mac" != "*" ]
   then
-    newmac=$(${NMBLOOKUP} -R -S -A $address \
+    newmac=$("$NMBLOOKUP" -R -S -A "$address" \
              | sed -n "s/^[[:space:]]*MAC Address =[[:space:]]*\([^[:space:]]*\).*/\1/p" \
              | tr "[:upper:]-" "[:lower:]:")
   fi
 
   if [ -z "$newmac" -o "$newmac" == "00:00:00:00:00:00" ]
   then
-    newmac=$($ARP -n -a "${address}" \
+    newmac=$("$ARP" -n -a "$address" \
              | sed -n "s;.*($address) at \([^ ]*\) \[ether\].*;\1;p")
 
     if [ -z "$newmac" ]
     then
-      newmac=$(getMacViaSSH "${username}" "${address}" "${password}")
+      newmac=$(getMacViaSSH "$username" "$address" "$password")
 
       if [ -z "$newmac" ]
       then
@@ -505,7 +510,7 @@ function getMac()
     fi
   fi
 
-  if [ "${newmac}" != "*" ]
+  if [ "$newmac" != "*" ]
   then
     if [ -z "$newmac" ]
     then
@@ -514,11 +519,11 @@ function getMac()
     fi
 
     (
-      $FLOCK $fd
-      echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: address=$address, mac=$mac" >&2
-      $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" address "$address"
-      $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" mac "$newmac"
-    ) {fd}<"${LOCK_FILE}"
+      "$FLOCK" $fd
+      echo "Update configuration file $CONF_DIR/$menu.conf for alias=$alias: address=$address, mac=$mac" >&2
+      "$CRUDINI" --set "$CONF_DIR/$menu.conf" "$alias" address "$address"
+      "$CRUDINI" --set "$CONF_DIR/$menu.conf" "$alias" mac "$newmac"
+    ) {fd}<"$LOCK_FILE"
   fi
 
   echo $address
@@ -546,30 +551,30 @@ function startViewer()
 
   if [ ! -z "$address" ]
   then
-    title="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" title 2>/dev/null)"
-    screensize="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" screensize 2>/dev/null)"
+    title="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" title 2>/dev/null)"
+    screensize="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" screensize 2>/dev/null)"
 
     if [ -z "$screensize" ]
     then
-      screensize="${SIZE}"
+      screensize="$SIZE"
     fi
 
     (
-      $FLOCK $fd
-      if [ "$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" protocol 2>/dev/null)" != "$protocol" ]
+      "$FLOCK" $fd
+      if [ "$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" protocol 2>/dev/null)" != "$protocol" ]
       then
-        echo "Update configuration file ${CONF_DIR}/${menu}.conf for alias=$alias: protocol=$protocol" >&2
-        $CRUDINI --set "${CONF_DIR}/${menu}.conf" "$alias" protocol $protocol
+        echo "Update configuration file $CONF_DIR/$menu.conf for alias=$alias: protocol=$protocol" >&2
+        "$CRUDINI" --set "$CONF_DIR/$menu.conf" "$alias" protocol "$protocol"
       fi
-    ) {fd}<"${LOCK_FILE}"
+    ) {fd}<"$LOCK_FILE"
 
     (
       echo "$(date +"%Y-%m-%d %H:%M:%S") New session started"
-      notify info "Open ${protocol} connection to ${alias}"
+      notify info "Open $protocol connection to $alias"
 
-      case ${protocol} in
+      case "$protocol" in
         RDP)
-          nocache="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" nocache 2>/dev/null)"
+          nocache="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" nocache 2>/dev/null)"
           if [ ${nocache:=0} -eq 0 ]
           then
             cache=
@@ -577,7 +582,7 @@ function startViewer()
             cache=-P
           fi
 
-          domain="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" domain 2>/dev/null)"
+          domain="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" domain 2>/dev/null)"
 
           if [ -z "$domain" ]
           then
@@ -593,38 +598,38 @@ function startViewer()
             owide="/multimon "
           fi
 
-          echo "$XFREERDP ${owide}/t:\"${title:=$alias}\" /u:\"${username}\" /p:XXXXXXXX ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address}:${portRDP} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE}"
-          $XFREERDP ${owide}/t:"${title:=$alias}" /u:"${username}" /p:"${password}" ${odomain} /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:${address}:${portRDP} +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 ${CONSOLE} 2>&1
+          echo "$XFREERDP $owide/t:\"${title:=$alias}\" /u:\"$username\" /p:XXXXXXXX $odomain /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:$address:$portRDP +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 $CONSOLE"
+          "$XFREERDP" $owide/t:"${title:=$alias}" /u:"$username" /p:"$password" $odomain /size:${screensize/+*/} /cert-ignore /cert-tofu /bpp:16 /kbd:0x0000100C /v:$address:$portRDP +home-drive +clipboard /sound:sys:pulse /microphone:sys:pulse /video /timeout:60000 $CONSOLE 2>&1
           ;;
 
         VNC)
-          echo "$VNCVIEWER -name \"${title:=$alias}\" -geometry ${screensize} ${address}"
-          $VNCVIEWER -name "${title:=$alias}" -geometry ${screensize} ${address} 2>&1
+          echo "$VNCVIEWER -name \"${title:=$alias}\" -geometry $screensize $address"
+          "$VNCVIEWER" -name "${title:=$alias}" -geometry $screensize $address 2>&1
           ;;
 
         SSH)
-          if [ -z "${username}" ]
+          if [ -z "$username" ]
           then
-            cn=${address}
+            cn=$address
           else
-            cn=${username}@${address}
+            cn=$username@$address
           fi
 
           if [ -z "$password" ]
           then
             echo "$TERMINAL --name \"${title:=$alias}\" --tab --command \"$SSH -o StrictHostKeyChecking=no \\\"$cn\\\"\""
-            $TERMINAL --name "${title:=$alias}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" 2>&1
+            "$TERMINAL" --name "${title:=$alias}" --tab --command "$SSH -o StrictHostKeyChecking=no \"$cn\"" 2>&1
           else
             echo "$SSHPASS -pXXXXXXXX $SSHCOPYID -o StrictHostKeyChecking=no \"$cn\""
-            $SSHPASS -p"$password" $SSHCOPYID -o StrictHostKeyChecking=no "$cn" 2>/dev/null
+            "$SSHPASS" -p"$password" "$SSHCOPYID" -o StrictHostKeyChecking=no "$cn" 2>/dev/null
             echo "$TERMINAL --name \"${title:=$alias}\" --tab --command \"$SSHPASS -pXXXXXXXX $SSH -o StrictHostKeyChecking=no \\\"$cn\\\"\""
-            $TERMINAL --name "${title:=$alias}" --tab --command "$SSHPASS -p"$password" $SSH -o StrictHostKeyChecking=no \"$cn\"" 2>&1
+            "$TERMINAL" --name "${title:=$alias}" --tab --command "$SSHPASS -p"$password" "$SSH" -o StrictHostKeyChecking=no \"$cn\"" 2>&1
           fi
           ;;
       esac
       local err=$?
       [ $err -ne 0 ] && notify info "Connection to machine '$alias' closed! (code=$err)"
-    ) | sed "s/^.*/${protocol} ${alias}: &/" >> "${ERROR_FILE}" &
+    ) | sed "s/^.*/$protocol $alias: &/" >> "$ERROR_FILE" &
   fi
 
   return 0
@@ -637,16 +642,16 @@ function list()
   if [ -z "$menu" ]
   then
     echo "Available displays:"
-    $XRANDR -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
+    "$XRANDR" -q | grep -w connected | sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\t\1\t-->\t\3\t\2/p"
     echo
     echo "Available environments:"
-    ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
+    ls -1 "$CONF_DIR"/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u
   else
-    CONF="${CONF_DIR}/${menu}.conf"
-    if [ -f "${CONF}" ]
+    CONF="$CONF_DIR/$menu.conf"
+    if [ -f "$CONF" ]
     then
       echo "Available machines for \"$menu\" environment:"
-      $CRUDINI --get "${CONF}" | grep -wv DEFAULT
+      "$CRUDINI" --get "$CONF" | grep -wv DEFAULT
     else
       echo "Environment \"$menu\" not found!"
     fi
@@ -659,12 +664,12 @@ function startConnection()
   local alias="$2"
   local wide="$3"
 
-  local username="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" username 2>/dev/null)"
-  local password="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" password 2>/dev/null)"
-  local address="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" address 2>/dev/null)"
-  local mac="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" mac 2>/dev/null)"
-  local autopass="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" autopass 2>/dev/null)"
-  local portRDP="$($CRUDINI --get "${CONF_DIR}/${menu}.conf" "$alias" portRDP 2>/dev/null)"
+  local username="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" username 2>/dev/null)"
+  local password="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" password 2>/dev/null)"
+  local address="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" address 2>/dev/null)"
+  local mac="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" mac 2>/dev/null)"
+  local autopass="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" autopass 2>/dev/null)"
+  local portRDP="$("$CRUDINI" --get "$CONF_DIR/$menu.conf" "$alias" portRDP 2>/dev/null)"
 
   local protocol
   local ip_address
@@ -674,10 +679,10 @@ function startConnection()
 
   if [ -z "$password" -a ! -z "$autopass" ]
   then
-    . ${SECURE_DIR}/${PROGRAM_NAME}-${autopass}.conf
+    . "$SECURE_DIR/$PROGRAM_NAME-$autopass.conf"
   fi
 
-  ip_address=$($HOST "$address" \
+  ip_address=$("$HOST" "$address" \
                | sed -n "s/.*has address \([0-9.]\+\)/\1/p;s/.*\b\([0-9]\+\)\.\([0-9]\+\)\.\([0-9]\+\)\.\([0-9]\+\)\.in-addr.arpa.*/\4.\3.\2.\1/p" \
                | head -n 1)
 
@@ -690,27 +695,27 @@ function startConnection()
 
   if [ -z "$found" ]
   then
-    echo -e "${alias} ${RED}NOK (MAC not defined)${WHITE}" >&2
+    echo -e "$alias ${RED}NOK (MAC not defined)$WHITE" >&2
     return 1
   fi
 
-  if ${NMAP} -Pn -n -p ${portRDP} --open ${found} | grep -q "^${portRDP}/tcp *open"
+  if "$NMAP" -Pn -n -p "$portRDP" --open "$found" | grep -q "^$portRDP/tcp *open"
   then
     protocol=RDP
 
     if [ -z "$username" ]
     then
-      username="$($ZENITY --entry --title "$alias" --text "Username")"
+      username="$("$ZENITY" --entry --title "$alias" --text "Username")"
     fi
 
     if [ -z "$password" ]
     then
-      password="$($ZENITY --entry --hide-text --title "$alias" --text "Password for user ${username}")"
+      password="$("$ZENITY" --entry --hide-text --title "$alias" --text "Password for user $username")"
     fi
-  elif ${NMAP} -Pn -n -p 5900 --open ${found} | grep -q "^5900/tcp *open"
+  elif "$NMAP" -Pn -n -p 5900 --open "$found" | grep -q "^5900/tcp *open"
   then
     protocol=VNC
-  elif ${NMAP} -Pn -n -p 22 --open ${found} | grep -q "^22/tcp *open"
+  elif "$NMAP" -Pn -n -p 22 --open "$found" | grep -q "^22/tcp *open"
   then
     protocol=SSH
   else
@@ -718,16 +723,16 @@ function startConnection()
     return 2
   fi
 
-  if [ ! -z "${found}" ]
+  if [ ! -z "$found" ]
   then
-    startViewer "$alias" "${found}" "$protocol" "$username" "$password" "$wide" "${portRDP}"
+    startViewer "$alias" "$found" "$protocol" "$username" "$password" "$wide" "$portRDP"
     status=$?
 
     if [ $status -eq 0 ]
     then
-      echo -e "${alias} ${GREEN}OK${WHITE}" >&2
+      echo -e "$alias ${GREEN}OK$WHITE" >&2
     else
-      echo -e "${alias} ${RED}NOK${WHITE}" >&2
+      echo -e "$alias ${RED}NOK$WHITE" >&2
     fi
   fi
 
@@ -742,13 +747,13 @@ function getMachines()
 
   for m in $menus
   do
-    for a in $($CRUDINI --get "${CONF_DIR}/${m}.conf" 2>/dev/null \
+    for a in $("$CRUDINI" --get "$CONF_DIR/$m.conf" 2>/dev/null \
                | grep -vw DEFAULT \
                | grep -iw "$alias")
     do
       if [ ! -z "$username" ]
       then
-        $CRUDINI --get "${CONF_DIR}/${m}.conf" "${a}" username 2>/dev/null \
+        "$CRUDINI" --get "$CONF_DIR/$m.conf" "$a" username 2>/dev/null \
         | grep -wq "$username"
         if [ $? -eq 0 ]
         then
@@ -771,28 +776,28 @@ function wol()
     local wolSleep=$(echo "$list" \
                      | while read MENU ALIAS
                      do
-                       ADDRESS="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" address 2>/dev/null)"
-                       MAC="$($CRUDINI --get "${CONF_DIR}/${MENU}.conf" "$ALIAS" mac 2>/dev/null)"
+                       ADDRESS="$("$CRUDINI" --get "$CONF_DIR/$MENU.conf" "$ALIAS" address 2>/dev/null)"
+                       MAC="$("$CRUDINI" --get "$CONF_DIR/$MENU.conf" "$ALIAS" mac 2>/dev/null)"
 
                        if [ -z "$MAC" ]
                        then
-                         echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"${WHITE}" >&2
+                         echo "${RED}MAC address unknown, unable to remotely wake up the machine \"$ALIAS\"$WHITE" >&2
                        else
                          ping -c 1 "$ADDRESS" > /dev/null 2>&1
                          if [ $? -eq 1 ]
                          then
-                           ${SUDO} echo "Waking up machine \"$ALIAS\"" >&2
+                           "$SUDO" echo "Waking up machine \"$ALIAS\"" >&2
                            for iface in $(ip -4 address | grep "state UP" | cut -d: -f2)
                            do
                              for mac in ${MAC//,/ }
                              do
-                               ${SUDO} ${ETHERWAKE} -D -i $iface "$mac" > /dev/null 2>&1
+                               "$SUDO" "$ETHERWAKE" -D -i "$iface" "$mac" > /dev/null 2>&1
                              done
                            done
                            sleep 4
                            echo 1
                          else
-                           echo "Machine $ALIAS is ${GREEN}on${WHITE}" >&2
+                           echo "Machine $ALIAS is ${GREEN}on$WHITE" >&2
                          fi
                        fi
                      done)
@@ -810,7 +815,7 @@ function wol()
 
 function checkDoubles()
 {
-  local doubles="$(grep -h "\[" "${CONF_DIR}"/*.conf | sort | uniq -c | grep -v " *1 " | sed "s/ *[0-9]\+ \+\[\(.*\)]$/\1/")"
+  local doubles="$(grep -h "\[" "$CONF_DIR"/*.conf | sort | uniq -c | grep -v " *1 " | sed "s/ *[0-9]\+ \+\[\(.*\)]$/\1/")"
 
   if [ ! -z "$doubles" ]
   then
@@ -839,10 +844,10 @@ unset position
 unset wakeOnLAN
 
 # Remove old error files
-find "${CONF_DIR}" -name "${ERROR_FILE_PREFIX}*.log" -mtime +30 -exec rm -f {} \;
+find "$CONF_DIR" -name "$ERROR_FILE_PREFIX*.log" -mtime +30 -exec rm -f {} \;
 # Ensure that an error file is present
-touch "${ERROR_FILE}"
-ln -sf "${ERROR_FILE}" "${CONF_DIR}/${ERROR_FILE_PREFIX}"
+touch "$ERROR_FILE"
+ln -sf "$ERROR_FILE" "$CONF_DIR/$ERROR_FILE_PREFIX"
 
 while getopts "h0wulfes:p:a" opt
 do
@@ -877,14 +882,14 @@ then
   ALIAS="$1"
   USERNAME="$2"
 
-  if [ -z "${ALIAS}" ]
+  if [ -z "$ALIAS" ]
   then
     help "Missing machine alias"
   fi
 else
   MENUALIAS="$1"
 
-  if [ -z "${MENUALIAS}" ]
+  if [ -z "$MENUALIAS" ]
   then
     help "Missing menu name"
   fi
@@ -896,29 +901,29 @@ then
   help "$SIZE"
 fi
 
-ACCESS="$(stat -c %a "${CONF_DIR}")"
+ACCESS="$(stat -c %a "$CONF_DIR")"
 
 if [ "${ACCESS:1}" -ne "00" ]
 then
-  notify error "The access right on ${CONF_DIR} are too permissive."
+  notify error "The access right on $CONF_DIR are too permissive."
   exit 4
 fi
 
 if [ -z "$MENUALIAS" ]
 then
-  MENUS=$(ls -1 ${CONF_DIR}/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
+  MENUS=$(ls -1 "$CONF_DIR"/*.conf | while read f; do echo "$(basename "$f" .conf)"; done | sort -u)
 else
   MENUS="$MENUALIAS"
 fi
 
 LIST=$(getMachines "$MENUS" "$ALIAS" "$USERNAME")
 
-if [ -z "${LIST}" ]
+if [ -z "$LIST" ]
 then
   help "No machine found corresponding criteria"
 fi
 
-NUM_FOUND=$(echo "${LIST}" | wc -l)
+NUM_FOUND=$(echo "$LIST" | wc -l)
 echo
 echo "Screen position: $SIZE"
 echo
@@ -933,7 +938,7 @@ echo "$LIST" \
 | (
     while read MENU ALIAS
     do
-      startConnection "${MENU}" "${ALIAS}" "$wide" &
+      startConnection "$MENU" "$ALIAS" "$wide" &
 
       sleep .5
     done
