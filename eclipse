@@ -3,7 +3,13 @@
 shopt -s globstar
 
 echo "Cleaning workspaces"
-locate -b ".launches" | grep "$HOME/" | tr "\n" "\0" | xargs -0 grep -arl "\/src\/test\/java" \
+(
+  echo $0
+  locate -b ".launches"
+) \
+| grep "$HOME/" \
+| tr "\n" "\0" \
+| xargs -0 grep -arl "\/src\/test\/java" \
 | while read file
   do
     echo "Removing: $file"
