@@ -326,36 +326,39 @@ $OLD_LIST" \
 
   if [ ! -f "$BASH_COMPLETION_FILE" ]
   then
-    echo "for bcfile in ~/.bash_completion.d/*; do [ -f \"\$bcfile\" ] && . \"\$bcfile\"; done" > "$BASH_COMPLETION_FILE"
+    cat > "$BASH_COMPLETION_FILE" <<-!
+	for bcfile in "${BASH_COMPLETION_DIR}"/*
+	do
+	  [ -f "\$bcfile" ] && . "\$bcfile"
+	done
+	!
   fi
 
-  if [ ! -f "$BASH_COMPLETION_DIR/$PROGRAM_NAME" ]
-  then
-    mkdir -p "$BASH_COMPLETION_DIR"
+  mkdir -p "$BASH_COMPLETION_DIR"
 
-    cat > "$BASH_COMPLETION_DIR/$PROGRAM_NAME" <<!
-_rdp_tab_complete () {
-  local cur prev
-  COMPREPLY=()
-  cur="\${COMP_WORDS[COMP_CWORD]}"
-  prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  cat > "$BASH_COMPLETION_DIR/$PROGRAM_NAME" <<-!
+	_rdp_tab_complete () {
+	  local cur prev
+	  COMPREPLY=()
+	  cur="\${COMP_WORDS[COMP_CWORD]}"
+	  prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  case "\$prev" in
-    -a|-l) IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\ls -1 "$CONF_DIR"/*.conf | \\sed -n "s:.*/\([^/]*\)\.conf:'\1':p")" -- "\$cur") ) ;;
-    -s) COMPREPLY=( \$(compgen -W "\$(\\xrandr -q | \\grep -w connected | \\sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\1/p")" -- "\$cur") ) ;;
-    *) if [ "\${cur:0:1}" == "-" ]
-       then
-         COMPREPLY=( \$(compgen -W $'-0\n-s\n-l\n-w\n-p\n-h\n-u\n-a\n-f' -- "\$cur") )
-       else
-         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "$CONF_DIR"/*.conf | \\sort -u)" -- "\$cur") )
-       fi
-       ;;
-  esac
-  return 0
-}
-complete -o filenames -F _rdp_tab_complete "$PROGRAM_NAME"
-!
-  fi
+	  case "\$prev" in
+	    -a|-l) IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\ls -1 "$CONF_DIR"/*.conf | \\sed -n "s:.*/\([^/]*\)\.conf:'\1':p")" -- "\$cur") ) ;;
+	    -s) COMPREPLY=( \$(compgen -W "\$(${XRANDR} -q | \\grep -w connected | \\sed -n "s/^\([^[:space:]]*\)[[:space:]]*connected[[:space:]]*\(primary\)\?[[:space:]]*\([0-9]*x[0-9]*+[0-9]*+[0-9]*\).*/\1/p")" -- "\$cur") ) ;;
+	    p) ;;
+	    *) if [ "\${cur:0:1}" == "-" ]
+	       then
+	         COMPREPLY=( \$(compgen -W $'-0\n-s\n-l\n-w\n-p\n-h\n-u\n-a\n-f\n-e' -- "\$cur") )
+	       else
+	         IFS=$'\n' COMPREPLY=( \$(compgen -W "\$(\\sed -n "s/^\[\([^]]*\)\].*/'\1'/p" "$CONF_DIR"/*.conf | \\sort -u)" -- "\$cur") )
+	       fi
+	       ;;
+	  esac
+	  return 0
+	}
+	complete -o filenames -F _rdp_tab_complete "$PROGRAM_NAME"
+	!
 }
 
 function checkMac()
