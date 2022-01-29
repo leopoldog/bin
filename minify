@@ -1,17 +1,31 @@
 #!/bin/bash
 
-label="$1"
+. $(dirname "$0")/library.sh
+
+if ! checkDependencies wmctrl
+then
+  exit -1
+fi
+
+LABEL="$1"
+
+if [ -z "$LABEL" ]
+then
+  echo "Usage: $(basename "$0") <label> [command]"
+  exit -1
+fi
+
 shift 1
 
-$@
+"$@"
 
-sleep 5
+[ ! -z "$1" ] && sleep 5
 
 i=0
 while true
 do
   let i=i+1
-  wmctrl -c "$label"
+  ${WMCTRL} -c "$LABEL"
 
   if [ $? -eq 0 -o $i -eq 40 ]
   then
