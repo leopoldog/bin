@@ -1,0 +1,22 @@
+#!/bin/bash
+
+label="$1"
+shift 1
+
+$@
+
+sleep 5
+
+i=0
+while true
+do
+  let i=i+1
+  wmctrl -c "$label"
+
+  if [ $? -eq 0 -o $i -eq 40 ]
+  then
+    break
+  else
+    sleep 0.25
+  fi
+done
