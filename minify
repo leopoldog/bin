@@ -2,7 +2,7 @@
 
 . $(dirname "$0")/library.sh
 
-if ! checkDependencies wmctrl
+if ! checkDependencies wmctrl xwininfo
 then
   exit -1
 fi
@@ -19,15 +19,20 @@ shift 1
 
 "$@"
 
-[ ! -z "$1" ] && sleep 5
+LC_ALL=C
 
 i=0
 while true
 do
+  if ${XWININFO} -id $(${WMCTRL} -l | grep -i "$LABEL" | cut -d" " -f1) 2>&1 | grep -q "Map State: IsUnMapped"
+  then
+    break
+  fi
+
   let i=i+1
   ${WMCTRL} -c "$LABEL"
 
-  if [ $? -eq 0 -o $i -eq 40 ]
+  if [ $? -eq 0 -o $i -ge 60 ]
   then
     break
   else
