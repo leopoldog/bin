@@ -26,7 +26,11 @@ LC_ALL=C
 i=0
 while true
 do
-  if ${XWININFO} -id $(${WMCTRL} -l | grep -i "$LABEL" | cut -d" " -f1) 2>&1 | grep -q "Map State: IsUnMapped"
+  echo "Try: $i - $(date +"%H:%M:%S")"
+  STATE=$(${XWININFO} -id $(${WMCTRL} -l | grep -i "$LABEL" | cut -d" " -f1) 2>&1)
+  echo "$STATE"
+
+  if echo "$STATE" | grep -q "Map State: IsUnMapped"
   then
     echo "Unmapped"
     break
@@ -39,7 +43,7 @@ do
   then
     echo "Success"
     break
-  elif [ $i -ge 60 ]
+  elif [ $i -ge 240 ] # 1 minute
   then
     echo "Timeout"
     break
