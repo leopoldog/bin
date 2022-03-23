@@ -258,3 +258,20 @@ function getGeometry()
   | uniq \
   | head -n1
 }
+
+function filterSubDirectories() {
+  local LIST="${@}"
+  local c="XXXXXXXXXXXXXXXXX NOTHING X NOTHING X NOTHING XXXXXXXXXXXXXXXXX"
+  local a
+
+  echo "$LIST" \
+  | LC_ALL=C sort \
+  | while read a
+    do
+      if [[ "${a}" != *"${c}"* ]]
+      then
+        echo "$a"
+        c="$a"
+      fi
+    done
+}
