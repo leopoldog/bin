@@ -5,8 +5,12 @@
 LIST=$(if [ "$1" == "-a" ]
        then
          # Update the whole disks, but with the informations of the last updatedb
-         locate -r "/\(\.git\|\.svn\|/CVS\)$" \
+         locate -r "/\(\.git\|\.svn\|CVS\)$" \
          | grep -va "^/main/cvsd/" \
+         | while read f
+           do
+             [ -d "$f" ] && echo "$f"
+           done \
          | sed "s:/CVS$::"
        else
          # Update only the local directory and subdirectories
