@@ -1,0 +1,47 @@
+#!/bin/bash
+
+exec > /tmp/updateHosts.log 2>&1
+
+SERVER_IP=10.122.17.100
+USER_NAME=leghielm
+ID_RSA=~/.ssh/id_rsa_hosts
+START_STRING="########### Begin: copied from ${SERVER_IP} ###########"
+END_STRING="############ End: copied from ${SERVER_IP} ############"
+
+export LC_ALL=C
+
+ping -c 1 $SERVER_IP > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+  hosts=$(
+    grep -q "${START_STRING}" /etc/hosts
+    if [ $? -eq 1 ]
+    then
+      cat /etc/hosts
+      echo "${START_STRING}"
+    else
+      grep -B 999999 "${START_STRING}" /etc/hosts
+    fi
+
+    echo -e "#\n# Updated at: $(date --iso-8601=seconds)\n#\n"
+    ssh ${USER_NAME}@${SERVER_IP} -o "KexAlgorithms ecdh-sha2-nistp521" -i ${ID_RSA} "for x in /etc/hosts /etc/hosts.d/*; do echo -e \"\n####################################################################\n# Source file: \$x\n####################################################################\"; cat \"\$x\"; done" \
+    | grep -v "127.0.0.\|::"
+
+    echo
+
+    grep -q "${END_STRING}" /etc/hosts
+    if [ $? -eq 1 ]
+    then
+      echo "${END_STRING}"
+    else
+      grep -A 999999 "${END_STRING}" /etc/hosts
+    fi
+  )
+
+  cp /etc/hosts /etc/hosts.old
+  echo "$hosts" \
+  | uniq > /etc/hosts
+fi
+
+dos2unix /cygdrive/c/Windows/System32/drivers/etc/hosts
+unix2dos /cygdrive/c/Windows/System32/drivers/etc/hosts
