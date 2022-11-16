@@ -8,40 +8,53 @@ ID_RSA=~/.ssh/id_rsa_hosts
 START_STRING="########### Begin: copied from ${SERVER_IP} ###########"
 END_STRING="############ End: copied from ${SERVER_IP} ############"
 
+if [ -f /cygdrive/c/Windows/System32/drivers/etc/hosts ]
+then
+  HOSTS_FILE=/cygdrive/c/Windows/System32/drivers/etc/hosts
+else
+  HOSTS_FILE=/etc/hosts
+fi
+
 export LC_ALL=C
 
 ping -c 1 $SERVER_IP > /dev/null 2>&1
 if [ $? -eq 0 ]
 then
   hosts=$(
-    grep -q "${START_STRING}" /etc/hosts
+    grep -q "${START_STRING}" ${HOSTS_FILE}
     if [ $? -eq 1 ]
     then
-      cat /etc/hosts
+      cat ${HOSTS_FILE}
       echo "${START_STRING}"
     else
-      grep -B 999999 "${START_STRING}" /etc/hosts
+      grep -B 999999 "${START_STRING}" ${HOSTS_FILE}
     fi
 
     echo -e "#\n# Updated at: $(date --iso-8601=seconds)\n#\n"
-    ssh ${USER_NAME}@${SERVER_IP} -o "KexAlgorithms ecdh-sha2-nistp521" -i ${ID_RSA} "for x in /etc/hosts /etc/hosts.d/*; do echo -e \"\n####################################################################\n# Source file: \$x\n####################################################################\"; cat \"\$x\"; done" \
+    ssh -x ${USER_NAME}@${SERVER_IP} -o "KexAlgorithms ecdh-sha2-nistp521" -i ${ID_RSA} "for x in /etc/hosts /etc/hosts.d/*; do echo -e \"\n####################################################################\n# Source file: \$x\n####################################################################\"; cat \"\$x\"; done" \
     | grep -v "127.0.0.\|::"
 
     echo
 
-    grep -q "${END_STRING}" /etc/hosts
+    grep -q "${END_STRING}" ${HOSTS_FILE}
     if [ $? -eq 1 ]
     then
       echo "${END_STRING}"
     else
-      grep -A 999999 "${END_STRING}" /etc/hosts
+      grep -A 999999 "${END_STRING}" ${HOSTS_FILE}
     fi
   )
 
-  cp /etc/hosts /etc/hosts.old
-  echo "$hosts" \
-  | uniq > /etc/hosts
-fi
+  mv ${HOSTS_FILE} ${HOSTS_FILE}.old
 
-dos2unix /cygdrive/c/Windows/System32/drivers/etc/hosts
-unix2dos /cygdrive/c/Windows/System32/drivers/etc/hosts
+  if [ -f /cygdrive/c/Windows/System32/drivers/etc/hosts ]
+  then
+    echo "$hosts" \
+    | uniq \
+    | dos2unix \
+    | unix2dos > ${HOSTS_FILE}
+  else
+    echo "$hosts" \
+    | uniq > ${HOSTS_FILE}
+  fi
+fi
