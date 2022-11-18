@@ -8,7 +8,7 @@ find . -xdev -type d -name ".git" \
     echo -e "\e[38;5;245m############### Cleaning directory: \e[01;33m$PWD\e[00m"
     git fetch -p
     git prune
-    git gc
+    git gc # --aggressive --prune=now
     popd > /dev/null 2>&1
     echo
   done  2>&1 \
