@@ -17,8 +17,7 @@ fi
 
 export LC_ALL=C
 
-ping -c 1 $SERVER_IP > /dev/null 2>&1
-if [ $? -eq 0 ]
+if ping -c 1 $SERVER_IP > /dev/null 2>&1
 then
   hosts=$(
     grep -q "${START_STRING}" ${HOSTS_FILE}
