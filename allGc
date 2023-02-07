@@ -6,6 +6,8 @@ find . -xdev -type d -name ".git" \
   do
     pushd "$(dirname "$f")" > /dev/null 2>&1
     echo -e "\e[38;5;245m############### Cleaning directory: \e[01;33m$PWD\e[00m"
+    chmod -R +w .git/objects/pack
+    rm -f .git/objects/pack/.tmp*
     git fetch -p
     git prune
     git gc # --aggressive --prune=now
