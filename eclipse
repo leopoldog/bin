@@ -5,7 +5,7 @@ shopt -s globstar
 echo "Cleaning workspaces"
 (
   echo $0
-  locate -b ".launches"
+  \locate $(\ls -1 /var/lib/plocate/*.db | \sed "s/.*/-d &/") -b ".launches"
 ) \
 | grep "$HOME/" \
 | tr "\n" "\0" \
