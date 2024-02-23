@@ -47,7 +47,7 @@ updateSVN() {
 
 updateGIT() {
   echo "Found a ${TYPE[0]} repository. Updating."
-  git pull 2>&1 \
+  git pull --prune 2>&1 \
   | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
   | sed $'s/^.*You are not currently on a branch.*$/\e[5m\e[93m&\e[0m/' \
   | sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
