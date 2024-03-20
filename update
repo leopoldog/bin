@@ -41,17 +41,17 @@ updateCVS() {
 updateSVN() {
   echo "Found a ${TYPE[0]} repository. Updating."
   svn update "$@" 2>&1 \
-  | sed $'s/^\(svn: E\|.*error\).*$/\e[48;5;1m&\e[0m/' \
-  | sed $'s/\\(At revision \|Updated to revision\\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
+  | sed $'s/^\(svn: E\|.*error\).*$/\e[48;5;1m&\e[0m/
+          s/\\(At revision \|Updated to revision\\)\\(.*\\)\\./\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m.\e[0m/'
 }
 
 updateGIT() {
   echo "Found a ${TYPE[0]} repository. Updating."
   git pull --prune 2>&1 \
-  | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/' \
-  | sed $'s/^.*You are not currently on a branch.*$/\e[5m\e[93m&\e[0m/' \
-  | sed $'s/^.*up-to-date.*$/\e[92m&\e[0m/' \
-  | sed $'s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
+  | sed $'s/^.*error.*$/\e[48;5;1m&\e[0m/
+          s/^.*You are not currently on a branch.*$/\e[5m\e[93m&\e[0m/
+          s/^.*up-to-date.*$/\e[92m&\e[0m/
+          s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
 
   grep branch "${TYPE[1]}/.git/config" \
   | sed "s/^\[//g;s/\]$//g" \
