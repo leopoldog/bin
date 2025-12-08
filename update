@@ -52,6 +52,9 @@ updateGIT() {
           s/^.*You are not currently on a branch.*$/\e[5m\e[93m&\e[0m/
           s/^.*up-to-date.*$/\e[92m&\e[0m/
           s/\\(Current branch \\)\\(.*\\)\\( is up to date\\)/\e[92m\\1\e[0m\e[96m\\2\e[0m\e[92m\\3\e[0m/'
+  git status 2>&1 \
+  | sed -n $'s/^.*\(On branch\)\(.*\)$/\\1\e[92m\\2\e[0m/p
+             s/^.*\(Your branch is up to date with \)\'\(.*\)\'./\\1\'\e[92m\\2\e[0m\'./p'
 
   grep branch "${TYPE[1]}/.git/config" \
   | sed "s/^\[//g;s/\]$//g" \
